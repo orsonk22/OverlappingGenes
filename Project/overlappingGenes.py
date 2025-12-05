@@ -594,19 +594,6 @@ def split_sequence_and_to_numeric_out(sequence, len_1_n, len_2_n, aa_out_1, aa_o
     # 3. Translate Seq 2
     translate_numeric_out(rc_buffer, aa_out_2)
 
-@njit
-def change_random_codon_int(len_sequence, sequence):
-    # sequence: np.array of ints (0,1,2,3)
-    new_position = np.random.randint(0, len_sequence)
-    current_nt = sequence[new_position]
-    idx = np.random.randint(0, 3)
-    if idx >= current_nt:
-        idx += 1
-    new_sequence = sequence.copy()
-    new_sequence[new_position] = idx
-    return new_sequence, new_position, idx
-
-
 # --- MODIFIED: Main simulation loop (Optimized) ---
 @njit
 def overlapped_sequence_generator_int(DCA_params_1, DCA_params_2, initialsequence, T1=1.0, T2=1.0, numberofiterations=100000, quiet=False, whentosave=0.1):
@@ -668,8 +655,6 @@ def overlapped_sequence_generator_int(DCA_params_1, DCA_params_2, initialsequenc
                 energy_history_seq_1[save_idx] = E1
                 energy_history_seq_2[save_idx] = E2
                 save_idx += 1
-            # Numba print is limited, but works in object mode or recent versions.
-            # if not quiet: print(...) 
 
         # 1. Mutate (In-place)
         new_position = np.random.randint(0, sequence_L)
@@ -930,15 +915,139 @@ def overlapped_sequence_generator_slow(DCA_params_1, DCA_params_2, initialsequen
     
     return final_seq_str, acceptedornot, energy_history_seq_1[:save_idx], energy_history_seq_2[:save_idx], finalenergies
 
+# --- NEW: Convergence Generator ---
+@njit
+def overlapped_sequence_generator_convergence(DCA_params_1, DCA_params_2, initialsequence, mean_e1, std_e1, mean_e2, std_e2, max_iterations=10000000, T1=1.0, T2=1.0):
+    # Unpack params
+    Jvec1, hvec1 = DCA_params_1[0], DCA_params_1[1]
+    Jvec2, hvec2 = DCA_params_2[0], DCA_params_2[1]
+
+    # Convert initial sequence to int array if it's a string
+    seq = seq_str_to_int_array(initialsequence)
+    sequence_L = len(seq)
+    
+    # Lengths in nucleotides
+    len_seq_1_n = int(3 * len(hvec1) / 21 + 3)
+    len_seq_2_n = int(3 * len(hvec2) / 21 + 3)
+    
+    # Lengths in AA (including stop)
+    len_aa_1 = len_seq_1_n // 3
+    len_aa_2 = len_seq_2_n // 3
+
+    # Pre-allocate working arrays
+    aa_seq_1 = np.empty(len_aa_1, dtype=np.int32) 
+    aa_seq_2 = np.empty(len_aa_2, dtype=np.int32)
+    rc_buffer = np.empty(len_seq_2_n, dtype=np.uint8)
+    
+    aa_seq_1_new = np.empty(len_aa_1, dtype=np.int32)
+    aa_seq_2_new = np.empty(len_aa_2, dtype=np.int32)
+
+    # Initial Translation
+    split_sequence_and_to_numeric_out(seq, len_seq_1_n, len_seq_2_n, aa_seq_1, aa_seq_2, rc_buffer)
+    
+    # Calculate Initial Energy
+    E1 = calculate_Energy(aa_seq_1[:-1], Jvec1, hvec1)
+    E2 = calculate_Energy(aa_seq_2[:-1], Jvec2, hvec2)
+    E = E1 + E2
+
+    itera = 0
+    converged = False
+    
+    # Check if within 1 SD of mean
+    if (mean_e1 - std_e1 <= E1 <= mean_e1 + std_e1) and (mean_e2 - std_e2 <= E2 <= mean_e2 + std_e2):
+        return itera, True, E1, E2
+
+    while itera < max_iterations:
+        # 1. Mutate
+        new_position = np.random.randint(0, sequence_L)
+        old_nt = seq[new_position]
+        idx = np.random.randint(0, 3)
+        if idx >= old_nt:
+            idx += 1
+        new_nt = idx
+        
+        seq[new_position] = new_nt
+        
+        # 2. Translate
+        split_sequence_and_to_numeric_out(seq, len_seq_1_n, len_seq_2_n, aa_seq_1_new, aa_seq_2_new, rc_buffer)
+
+        # 3. Check Stops
+        stop_codon_error = False
+        if aa_seq_1_new[len_aa_1 - 1] != 21 or aa_seq_2_new[len_aa_2 - 1] != 21:
+            stop_codon_error = True
+        else:
+            for i in range(len_aa_1 - 1):
+                if aa_seq_1_new[i] == 21: stop_codon_error = True; break
+            if not stop_codon_error:
+                for i in range(len_aa_2 - 1):
+                    if aa_seq_2_new[i] == 21: stop_codon_error = True; break
+        
+        if stop_codon_error:
+            seq[new_position] = old_nt
+            itera += 1
+            continue
+
+        # 4. Delta E
+        delta_H_1 = 0.0
+        delta_H_2 = 0.0
+        
+        aa_pos_1 = -1
+        new_aa_1 = -1
+        for i in range(len_aa_1 - 1):
+            if aa_seq_1[i] != aa_seq_1_new[i]:
+                aa_pos_1 = i
+                new_aa_1 = aa_seq_1_new[i]
+                break
+        if aa_pos_1 != -1:
+            delta_H_1 = calculate_Delta_Energy(aa_seq_1, Jvec1, hvec1, aa_pos_1, new_aa_1)
+
+        aa_pos_2 = -1
+        new_aa_2 = -1
+        for i in range(len_aa_2 - 1):
+            if aa_seq_2[i] != aa_seq_2_new[i]:
+                aa_pos_2 = i
+                new_aa_2 = aa_seq_2_new[i]
+                break
+        if aa_pos_2 != -1:
+            delta_H_2 = calculate_Delta_Energy(aa_seq_2, Jvec2, hvec2, aa_pos_2, new_aa_2)
+
+        # 5. Metropolis
+        delta_H = (delta_H_1 / T1) + (delta_H_2 / T2)
+
+        accept = False
+        if delta_H <= 0:
+            accept = True
+        else:
+            if np.random.rand() < np.exp(-delta_H):
+                accept = True
+        
+        if accept:
+            for i in range(len_aa_1): aa_seq_1[i] = aa_seq_1_new[i]
+            for i in range(len_aa_2): aa_seq_2[i] = aa_seq_2_new[i]
+            E1 += delta_H_1
+            E2 += delta_H_2
+            E = E1 + E2
+        else:
+            seq[new_position] = old_nt
+
+        itera += 1
+        
+        # Check if within 1 SD of mean
+        if (mean_e1 - std_e1 <= E1 <= mean_e1 + std_e1) and (mean_e2 - std_e2 <= E2 <= mean_e2 + std_e2):
+            converged = True
+            break
+
+    return itera, converged, E1, E2
+
 def main():
     overlapLen = 62
 
     #### Read in input data
-    dcaparams1 = "../Data/20250601 bmDCA/bmDCA/PF00004/PF00004_params.dat"
-    dcaparams2 = "../Data/20250601 bmDCA/bmDCA/PF00041/PF00041_params.dat"
+    dcaparams1 = "PF00004/PF00004_params.dat"
+    dcaparams2 = "PF00041/PF00041_params.dat"
 
-    naturalenergies1_file = "../Data/20250601 bmDCA/bmDCA/PF00004/PF00004_naturalenergies.txt"
-    naturalenergies2_file = "../Data/20250601 bmDCA/bmDCA/PF00041/PF00041_naturalenergies.txt"
+    naturalenergies1_file = "PF00004/PF00004_naturalenergies.txt"
+    naturalenergies2_file = "PF00041/PF00041_naturalenergies.txt"
 
     Js_1, hs_1 = extract_params(dcaparams1)
     Js_2, hs_2 = extract_params(dcaparams2)
