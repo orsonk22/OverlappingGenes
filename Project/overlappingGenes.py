@@ -1115,6 +1115,36 @@ def main():
     axs[1].axhline(y=mean_2 - sd_2, linestyle='--', color=colorTable["g"], label=r'$-\sigma$ seq 2')
     plt.show()
 
+
+def get_optimal_overlaps(min_len, max_len, step=3):
+    """
+    Generates a list of overlap lengths that result in the '3-0' (easiest)
+    reading frame to reduce benchmarking noise.
+    
+    In overlappingGenes.py, l1 is a multiple of 3.
+    The 3-0 frame occurs when (l1 - overlap) % 3 == 0.
+    Therefore, overlap must be a multiple of 3.
+    """
+    # Create basic range
+    overlaps = []
+    
+    # Ensure start is a multiple of 3
+    current = min_len
+    while current % 3 != 0:
+        current += 1
+        
+    while current <= max_len:
+        overlaps.append(current)
+        # Ensure step keeps us on multiples of 3
+        # If user passes step=5, we force it to next multiple of 3
+        current += step
+        while current % 3 != 0:
+            current += 1
+            
+    return overlaps
+
+
+
 if __name__ == "__main__":
     # Cprofile to see how long it takes to run
     # import cProfile
