@@ -917,7 +917,7 @@ def overlapped_sequence_generator_slow(DCA_params_1, DCA_params_2, initialsequen
 
 # --- NEW: Convergence Generator ---
 @njit
-def overlapped_sequence_generator_convergence(DCA_params_1, DCA_params_2, initialsequence, mean_e1, std_e1, mean_e2, std_e2, max_iterations=10000000, T1=1.0, T2=1.0, check_e1=True, check_e2=True):
+def overlapped_sequence_generator_convergence(DCA_params_1, DCA_params_2, initialsequence, mean_e1, std_e1, mean_e2, std_e2, max_iterations=10000000, T1=1.0, T2=1.0):
     # Unpack params
     Jvec1, hvec1 = DCA_params_1[0], DCA_params_1[1]
     Jvec2, hvec2 = DCA_params_2[0], DCA_params_2[1]
@@ -953,11 +953,8 @@ def overlapped_sequence_generator_convergence(DCA_params_1, DCA_params_2, initia
     itera = 0
     converged = False
     
-    # Check if within 1 SD of mean (Initial Check)
-    cond1 = not check_e1 or (mean_e1 - std_e1 <= E1 <= mean_e1 + std_e1)
-    cond2 = not check_e2 or (mean_e2 - std_e2 <= E2 <= mean_e2 + std_e2)
-    
-    if cond1 and cond2:
+    # Check if within 1 SD of mean
+    if (mean_e1 - std_e1 <= E1 <= mean_e1 + std_e1) and (mean_e2 - std_e2 <= E2 <= mean_e2 + std_e2):
         return itera, True, E1, E2
 
     while itera < max_iterations:
@@ -1036,10 +1033,7 @@ def overlapped_sequence_generator_convergence(DCA_params_1, DCA_params_2, initia
         itera += 1
         
         # Check if within 1 SD of mean
-        cond1 = not check_e1 or (mean_e1 - std_e1 <= E1 <= mean_e1 + std_e1)
-        cond2 = not check_e2 or (mean_e2 - std_e2 <= E2 <= mean_e2 + std_e2)
-        
-        if cond1 and cond2:
+        if (mean_e1 - std_e1 <= E1 <= mean_e1 + std_e1) and (mean_e2 - std_e2 <= E2 <= mean_e2 + std_e2):
             converged = True
             break
 
