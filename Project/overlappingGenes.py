@@ -1039,7 +1039,145 @@ def overlapped_sequence_generator_convergence(DCA_params_1, DCA_params_2, initia
 
     return itera, converged, E1, E2
 
+
+# --- NEW: Selective Convergence Generator ---
+@njit
+def overlapped_sequence_generator_selective(DCA_params_1, DCA_params_2, initialsequence, mean_e1, std_e1, mean_e2, std_e2, max_iterations=10000000, T1=1.0, T2=1.0, check_1=True, check_2=True):
+    # Unpack params
+    Jvec1, hvec1 = DCA_params_1[0], DCA_params_1[1]
+    Jvec2, hvec2 = DCA_params_2[0], DCA_params_2[1]
+
+    # Convert initial sequence to int array if it's a string
+    seq = seq_str_to_int_array(initialsequence)
+    sequence_L = len(seq)
+    
+    # Lengths in nucleotides
+    len_seq_1_n = int(3 * len(hvec1) / 21 + 3)
+    len_seq_2_n = int(3 * len(hvec2) / 21 + 3)
+    
+    # Lengths in AA (including stop)
+    len_aa_1 = len_seq_1_n // 3
+    len_aa_2 = len_seq_2_n // 3
+
+    # Pre-allocate working arrays
+    aa_seq_1 = np.empty(len_aa_1, dtype=np.int32) 
+    aa_seq_2 = np.empty(len_aa_2, dtype=np.int32)
+    rc_buffer = np.empty(len_seq_2_n, dtype=np.uint8)
+    
+    aa_seq_1_new = np.empty(len_aa_1, dtype=np.int32)
+    aa_seq_2_new = np.empty(len_aa_2, dtype=np.int32)
+
+    # Initial Translation
+    split_sequence_and_to_numeric_out(seq, len_seq_1_n, len_seq_2_n, aa_seq_1, aa_seq_2, rc_buffer)
+    
+    # Calculate Initial Energy
+    E1 = calculate_Energy(aa_seq_1[:-1], Jvec1, hvec1)
+    E2 = calculate_Energy(aa_seq_2[:-1], Jvec2, hvec2)
+    E = E1 + E2
+
+    itera = 0
+    converged = False
+    
+    # Helper to check convergence
+    # We define convergence as being within 1 SD of the mean natural energy
+    # Note: Logic inside loop to allow checking per iteration
+
+    while itera < max_iterations:
+        # Check convergence at start of loop (or end, doesn't matter much)
+        is_conv_1 = True
+        if check_1:
+            if not (mean_e1 - std_e1 <= E1 <= mean_e1 + std_e1):
+                is_conv_1 = False
+        
+        is_conv_2 = True
+        if check_2:
+            if not (mean_e2 - std_e2 <= E2 <= mean_e2 + std_e2):
+                is_conv_2 = False
+        
+        if is_conv_1 and is_conv_2:
+            converged = True
+            break
+
+        # 1. Mutate
+        new_position = np.random.randint(0, sequence_L)
+        old_nt = seq[new_position]
+        idx = np.random.randint(0, 3)
+        if idx >= old_nt:
+            idx += 1
+        new_nt = idx
+        
+        seq[new_position] = new_nt
+        
+        # 2. Translate
+        split_sequence_and_to_numeric_out(seq, len_seq_1_n, len_seq_2_n, aa_seq_1_new, aa_seq_2_new, rc_buffer)
+
+        # 3. Check Stops
+        stop_codon_error = False
+        # Relaxed check: Only check for internal stops (premature truncation)
+        # We generally assume the last codon is intended to be a stop or is ignored by energy calc ([:-1])
+        
+        for i in range(len_aa_1 - 1):
+            if aa_seq_1_new[i] == 21: stop_codon_error = True; break
+        
+        if not stop_codon_error:
+            for i in range(len_aa_2 - 1):
+                if aa_seq_2_new[i] == 21: stop_codon_error = True; break
+        
+        if stop_codon_error:
+            seq[new_position] = old_nt
+            itera += 1
+            continue
+
+        # 4. Delta E
+        delta_H_1 = 0.0
+        delta_H_2 = 0.0
+        
+        aa_pos_1 = -1
+        new_aa_1 = -1
+        for i in range(len_aa_1 - 1):
+            if aa_seq_1[i] != aa_seq_1_new[i]:
+                aa_pos_1 = i
+                new_aa_1 = aa_seq_1_new[i]
+                break
+        if aa_pos_1 != -1:
+            delta_H_1 = calculate_Delta_Energy(aa_seq_1, Jvec1, hvec1, aa_pos_1, new_aa_1)
+
+        aa_pos_2 = -1
+        new_aa_2 = -1
+        for i in range(len_aa_2 - 1):
+            if aa_seq_2[i] != aa_seq_2_new[i]:
+                aa_pos_2 = i
+                new_aa_2 = aa_seq_2_new[i]
+                break
+        if aa_pos_2 != -1:
+            delta_H_2 = calculate_Delta_Energy(aa_seq_2, Jvec2, hvec2, aa_pos_2, new_aa_2)
+
+        # 5. Metropolis
+        delta_H = (delta_H_1 / T1) + (delta_H_2 / T2)
+
+        accept = False
+        if delta_H <= 0:
+            accept = True
+        else:
+            if np.random.rand() < np.exp(-delta_H):
+                accept = True
+        
+        if accept:
+            for i in range(len_aa_1): aa_seq_1[i] = aa_seq_1_new[i]
+            for i in range(len_aa_2): aa_seq_2[i] = aa_seq_2_new[i]
+            E1 += delta_H_1
+            E2 += delta_H_2
+            E = E1 + E2
+        else:
+            seq[new_position] = old_nt
+
+        itera += 1
+        
+    final_seq_str = int_array_to_seq_str(seq)
+    return itera, converged, E1, E2, final_seq_str
+
 def main():
+
     overlapLen = 62
 
     #### Read in input data
