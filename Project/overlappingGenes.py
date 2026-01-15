@@ -140,6 +140,152 @@ def aa_char_to_int(aa_char):
     if aa_char == '*': return 21 # STOP codon
     return 0 # Default/gap
 
+@njit
+def count_matches(seq1, seq2):
+    """
+    Counts number of matching positions between two integer arrays.
+    """
+    matches = 0
+    for i in range(len(seq1)):
+        if seq1[i] == seq2[i]:
+            matches += 1
+    return matches
+
+@njit
+def run_ffs_shoot(DCA_params_1, DCA_params_2, initial_seq_int, target_seq_int, 
+                  target_lambda, fail_lambda, 
+                  T1=1.0, T2=1.0, max_steps=100000):
+    """
+    Runs a single FFS shoot/trial.
+    
+    Arguments:
+    - initial_seq_int: Starting sequence (int array)
+    - target_seq_int: Target sequence (int array) - used for lambda calc
+    - target_lambda: Success threshold (number of matches >= this)
+    - fail_lambda: Failure threshold (number of matches < this)
+    
+    Returns:
+    - code (int): 1 = Success, -1 = Failure, 0 = Timeout
+    - final_seq (int array): The sequence at termination
+    """
+    # Unpack params
+    Jvec1, hvec1 = DCA_params_1[0], DCA_params_1[1]
+    Jvec2, hvec2 = DCA_params_2[0], DCA_params_2[1]
+
+    seq = initial_seq_int.copy()
+    sequence_L = len(seq)
+    
+    # Lengths
+    len_seq_1_n = int(3 * len(hvec1) / 21 + 3)
+    len_seq_2_n = int(3 * len(hvec2) / 21 + 3)
+    len_aa_1 = len_seq_1_n // 3
+    len_aa_2 = len_seq_2_n // 3
+    
+    # Buffers
+    aa_seq_1 = np.empty(len_aa_1, dtype=np.int32) 
+    aa_seq_2 = np.empty(len_aa_2, dtype=np.int32)
+    rc_buffer = np.empty(len_seq_2_n, dtype=np.uint8)
+    aa_seq_1_new = np.empty(len_aa_1, dtype=np.int32)
+    aa_seq_2_new = np.empty(len_aa_2, dtype=np.int32)
+
+    # Initial States
+    split_sequence_and_to_numeric_out(seq, len_seq_1_n, len_seq_2_n, aa_seq_1, aa_seq_2, rc_buffer)
+    
+    # Initial Check (Optimization: Assume caller checked initial lambda?)
+    # But let's check just in case
+    current_lambda = count_matches(seq, target_seq_int)
+    if current_lambda >= target_lambda:
+        return 1, seq
+    if current_lambda < fail_lambda:
+        return -1, seq
+        
+    # Initial Energy (Optimized: we might not need E if only mutations matter? 
+    # No, we need Delta E for Metropolis)
+    # But we don't need full E, just Delta E. 
+    # However, to maintain current state, it's easier to just track changes.
+    # Wait, we usually don't need absolute E for updates, but we need current AA seqs.
+    
+    itera = 0
+    while itera < max_steps:
+        # 1. Mutate
+        new_position = np.random.randint(0, sequence_L)
+        old_nt = seq[new_position]
+        idx = np.random.randint(0, 3)
+        if idx >= old_nt: idx += 1
+        new_nt = idx
+        
+        seq[new_position] = new_nt
+        
+        # 2. Translate
+        split_sequence_and_to_numeric_out(seq, len_seq_1_n, len_seq_2_n, aa_seq_1_new, aa_seq_2_new, rc_buffer)
+
+        # 3. Stop Codon Check
+        stop_codon_error = False
+        if aa_seq_1_new[len_aa_1 - 1] != 21 or aa_seq_2_new[len_aa_2 - 1] != 21:
+            stop_codon_error = True
+        else:
+            for i in range(len_aa_1 - 1):
+                if aa_seq_1_new[i] == 21: stop_codon_error = True; break
+            if not stop_codon_error:
+                for i in range(len_aa_2 - 1):
+                    if aa_seq_2_new[i] == 21: stop_codon_error = True; break
+        
+        if stop_codon_error:
+            # Revert
+            seq[new_position] = old_nt
+            itera += 1
+            continue
+
+        # 4. Energy Delta
+        delta_H = 0.0 # Initialize?
+        
+        # We need calculate_Delta_Energy.
+        # But we need to know WHERE changes are in AA.
+        # Re-use logic from generator.
+        
+        delta_H_1 = 0.0
+        aa_pos_1 = -1; new_aa_1 = -1
+        for i in range(len_aa_1 - 1):
+            if aa_seq_1[i] != aa_seq_1_new[i]:
+                aa_pos_1 = i; new_aa_1 = aa_seq_1_new[i]; break
+        if aa_pos_1 != -1:
+            delta_H_1 = calculate_Delta_Energy(aa_seq_1, Jvec1, hvec1, aa_pos_1, new_aa_1)
+            
+        delta_H_2 = 0.0
+        aa_pos_2 = -1; new_aa_2 = -1
+        for i in range(len_aa_2 - 1):
+            if aa_seq_2[i] != aa_seq_2_new[i]:
+                aa_pos_2 = i; new_aa_2 = aa_seq_2_new[i]; break
+        if aa_pos_2 != -1:
+            delta_H_2 = calculate_Delta_Energy(aa_seq_2, Jvec2, hvec2, aa_pos_2, new_aa_2)
+            
+        delta_H = (delta_H_1 / T1) + (delta_H_2 / T2)
+        
+        # 5. Metropolis
+        accept = False
+        if delta_H <= 0: accept = True
+        elif np.random.rand() < np.exp(-delta_H): accept = True
+        
+        if accept:
+            # Update AAs
+            for i in range(len_aa_1): aa_seq_1[i] = aa_seq_1_new[i]
+            for i in range(len_aa_2): aa_seq_2[i] = aa_seq_2_new[i]
+            # Seq is already updated.
+            
+            # CHECK LAMBDA
+            current_lambda = count_matches(seq, target_seq_int)
+            if current_lambda >= target_lambda:
+                return 1, seq
+            if current_lambda < fail_lambda:
+                return -1, seq
+        else:
+            # Revert
+            seq[new_position] = old_nt
+            
+        itera += 1
+        
+    return 0, seq # Timeout
+
 #NEW: numba list-to-array converter
 @njit
 def to_numeric_int(n_sequence):
@@ -789,6 +935,204 @@ def overlapped_sequence_generator_int(DCA_params_1, DCA_params_2, initialsequenc
     best_seq_str = int_array_to_seq_str(best_seq)
     
     return final_seq_str, acceptedornot, energy_history_seq_1[:save_idx], energy_history_seq_2[:save_idx], finalenergies, best_energies, best_seq_str
+
+@njit
+def overlapped_sequence_generator_best(DCA_params_1, DCA_params_2, initialsequence, target_E1, target_E2, T1=1.0, T2=1.0, numberofiterations=100000, quiet=False, whentosave=0.1):
+    """
+    Same as overlapped_sequence_generator_int, but returns the sequence that was Closest
+    to the target energies (Euclidean distance in E1-E2 space), not the final sequence.
+    """
+    # Unpack params
+    Jvec1, hvec1 = DCA_params_1[0], DCA_params_1[1]
+    Jvec2, hvec2 = DCA_params_2[0], DCA_params_2[1]
+
+    # Convert initial sequence to int array if it's a string
+    seq = seq_str_to_int_array(initialsequence)
+    sequence_L = len(seq)
+    
+    # Lengths in nucleotides
+    len_seq_1_n = int(3 * len(hvec1) / 21 + 3)
+    len_seq_2_n = int(3 * len(hvec2) / 21 + 3)
+    
+    # Lengths in AA (including stop)
+    len_aa_1 = len_seq_1_n // 3
+    len_aa_2 = len_seq_2_n // 3
+
+    accepted = 0.0
+    prob_accepted = 0.0
+    not_accepted = 0.0
+    
+    # Pre-allocate history arrays
+    max_saves = int(100.0 / whentosave) + 10 # Buffer
+    energy_history_seq_1 = np.empty(max_saves, dtype=np.float64)
+    energy_history_seq_2 = np.empty(max_saves, dtype=np.float64)
+    save_idx = 0
+
+    # Pre-allocate working arrays
+    aa_seq_1 = np.empty(len_aa_1, dtype=np.int32) # Numeric AA
+    aa_seq_2 = np.empty(len_aa_2, dtype=np.int32)
+    rc_buffer = np.empty(len_seq_2_n, dtype=np.uint8)
+    
+    # Buffers for "new" sequences (to avoid allocation)
+    aa_seq_1_new = np.empty(len_aa_1, dtype=np.int32)
+    aa_seq_2_new = np.empty(len_aa_2, dtype=np.int32)
+
+    # Best Sequence Tracking
+    best_seq = seq.copy()
+    min_dist_sq = 1e20 # Large number
+
+    # Initial Translation
+    split_sequence_and_to_numeric_out(seq, len_seq_1_n, len_seq_2_n, aa_seq_1, aa_seq_2, rc_buffer)
+    
+    # Calculate Initial Energy (Full O(L^2))
+    E1 = calculate_Energy(aa_seq_1[:-1], Jvec1, hvec1)
+    E2 = calculate_Energy(aa_seq_2[:-1], Jvec2, hvec2)
+    E = E1 + E2
+
+    # Initial Best Check
+    dist_sq = (E1 - target_E1)**2 + (E2 - target_E2)**2
+    if dist_sq < min_dist_sq:
+        min_dist_sq = dist_sq
+        best_seq[:] = seq[:]
+
+    energy_history_seq_1[save_idx] = E1
+    energy_history_seq_2[save_idx] = E2
+    save_idx += 1
+
+    itera = 1
+    nextmessage = 100 * whentosave 
+    
+    # --- Main Monte Carlo Loop ---
+    while itera < numberofiterations:
+        if 100 * (itera / numberofiterations) > nextmessage:
+            nextmessage += 100 * whentosave
+            if save_idx < max_saves:
+                energy_history_seq_1[save_idx] = E1
+                energy_history_seq_2[save_idx] = E2
+                save_idx += 1
+
+        # 1. Mutate (In-place)
+        new_position = np.random.randint(0, sequence_L)
+        old_nt = seq[new_position]
+        idx = np.random.randint(0, 3)
+        if idx >= old_nt:
+            idx += 1
+        new_nt = idx
+        
+        # Apply mutation
+        seq[new_position] = new_nt
+        
+        # 2. Translate to "New" buffers
+        split_sequence_and_to_numeric_out(seq, len_seq_1_n, len_seq_2_n, aa_seq_1_new, aa_seq_2_new, rc_buffer)
+
+        # 3. Check for invalid stop codons
+        stop_codon_error = False
+        # Check last positions are stops (21)
+        if aa_seq_1_new[len_aa_1 - 1] != 21 or aa_seq_2_new[len_aa_2 - 1] != 21:
+            stop_codon_error = True
+        else:
+            # Check internal positions for stops
+            for i in range(len_aa_1 - 1):
+                if aa_seq_1_new[i] == 21: stop_codon_error = True; break
+            if not stop_codon_error:
+                for i in range(len_aa_2 - 1):
+                    if aa_seq_2_new[i] == 21: stop_codon_error = True; break
+        
+        if stop_codon_error:
+            not_accepted += 1
+            # Revert mutation
+            seq[new_position] = old_nt
+            # itera += 1
+            continue
+
+        # 4. Find changed AAs and calculate Delta_E
+        delta_H_1 = 0.0
+        delta_H_2 = 0.0
+        
+        # Find change in Seq 1
+        aa_pos_1 = -1
+        new_aa_1 = -1
+        
+        for i in range(len_aa_1 - 1): # Ignore stop codon at end
+            if aa_seq_1[i] != aa_seq_1_new[i]:
+                aa_pos_1 = i
+                new_aa_1 = aa_seq_1_new[i]
+                break
+        
+        if aa_pos_1 != -1:
+            delta_H_1 = calculate_Delta_Energy(aa_seq_1, Jvec1, hvec1, aa_pos_1, new_aa_1)
+
+        # Frame 2
+        aa_pos_2 = -1
+        new_aa_2 = -1
+        for i in range(len_aa_2 - 1):
+            if aa_seq_2[i] != aa_seq_2_new[i]:
+                aa_pos_2 = i
+                new_aa_2 = aa_seq_2_new[i]
+                break
+        
+        if aa_pos_2 != -1:
+            delta_H_2 = calculate_Delta_Energy(aa_seq_2, Jvec2, hvec2, aa_pos_2, new_aa_2)
+
+        # 5. Metropolis Step
+        delta_H = (delta_H_1 / T1) + (delta_H_2 / T2)
+
+        accept = False
+        if delta_H <= 0:
+            accept = True
+        else:
+            if np.random.rand() < np.exp(-delta_H):
+                accept = True
+        
+        if accept:
+            # Accept: Update State
+            for i in range(len_aa_1): aa_seq_1[i] = aa_seq_1_new[i]
+            for i in range(len_aa_2): aa_seq_2[i] = aa_seq_2_new[i]
+            
+            E1 += delta_H_1
+            E2 += delta_H_2
+            E = E1 + E2
+            
+            # Update Best Sequence if this accepted state is better
+            dist_sq = (E1 - target_E1)**2 + (E2 - target_E2)**2
+            if dist_sq < min_dist_sq:
+                min_dist_sq = dist_sq
+                best_seq[:] = seq[:]
+            
+            if delta_H <= 0:
+                accepted += 1
+            else:
+                prob_accepted += 1
+        else:
+            # Reject: Revert State
+            seq[new_position] = old_nt
+            not_accepted += 1
+
+        itera += 1
+        
+        # Sanity Check every 1000 iterations
+        if itera % 1000 == 0:
+            E1_check = calculate_Energy(aa_seq_1[:-1], Jvec1, hvec1)
+            E2_check = calculate_Energy(aa_seq_2[:-1], Jvec2, hvec2)
+            E_check = E1_check + E2_check
+            
+            if abs(E_check - E) > 1e-4:
+                E1 = E1_check
+                E2 = E2_check
+                E = E_check
+                # Re-check best (just in case)
+                dist_sq = (E1 - target_E1)**2 + (E2 - target_E2)**2
+                if dist_sq < min_dist_sq:
+                    min_dist_sq = dist_sq
+                    best_seq[:] = seq[:]
+
+    finalenergies = np.array([E1, E2])
+    acceptedornot = np.array([accepted, prob_accepted, not_accepted])
+    
+    # Return BEST sequence string
+    best_seq_str = int_array_to_seq_str(best_seq)
+    
+    return best_seq_str, acceptedornot, energy_history_seq_1[:save_idx], energy_history_seq_2[:save_idx], finalenergies
 
 # --- NEW: Seeding helper ---
 @njit
