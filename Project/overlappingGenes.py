@@ -596,7 +596,7 @@ def split_sequence_and_to_numeric_out(sequence, len_1_n, len_2_n, aa_out_1, aa_o
 
 # --- MODIFIED: Main simulation loop (Optimized) ---
 @njit
-def overlapped_sequence_generator_int(DCA_params_1, DCA_params_2, initialsequence, T1=1.0, T2=1.0, numberofiterations=100000, quiet=False, whentosave=0.1):
+def overlapped_sequence_generator_int(DCA_params_1, DCA_params_2, initialsequence, T1=1.0, T2=1.0, numberofiterations=100000, quiet=False, whentosave=0.1, nat_mean1=None, nat_mean2=None):
     # Unpack params
     Jvec1, hvec1 = DCA_params_1[0], DCA_params_1[1]
     Jvec2, hvec2 = DCA_params_2[0], DCA_params_2[1]
@@ -643,6 +643,17 @@ def overlapped_sequence_generator_int(DCA_params_1, DCA_params_2, initialsequenc
     energy_history_seq_1[save_idx] = E1
     energy_history_seq_2[save_idx] = E2
     save_idx += 1
+
+    # Initialize "Best" tracking (Closest to Natural Mean)
+    best_E1 = E1
+    best_E2 = E2
+    min_dist = 1e99 # Infinity
+    best_seq = seq.copy() # Store best sequence
+    
+    if nat_mean1 is not None and nat_mean2 is not None:
+        # Initial check
+        dist = abs(E1 - nat_mean1) + abs(E2 - nat_mean2)
+        min_dist = dist
 
     itera = 1
     nextmessage = 100 * whentosave 
@@ -742,6 +753,15 @@ def overlapped_sequence_generator_int(DCA_params_1, DCA_params_2, initialsequenc
                 accepted += 1
             else:
                 prob_accepted += 1
+            
+            # --- Track Best Energy (Closest to Natural) ---
+            if nat_mean1 is not None and nat_mean2 is not None:
+                current_dist = abs(E1 - nat_mean1) + abs(E2 - nat_mean2)
+                if current_dist < min_dist:
+                    min_dist = current_dist
+                    best_E1 = E1
+                    best_E2 = E2
+                    best_seq[:] = seq[:] # Copy current sequence to best
         else:
             # Reject: Revert State
             seq[new_position] = old_nt
@@ -763,10 +783,12 @@ def overlapped_sequence_generator_int(DCA_params_1, DCA_params_2, initialsequenc
     finalenergies = np.array([E1, E2])
     acceptedornot = np.array([accepted, prob_accepted, not_accepted])
     
-    # Return string sequence
+    # Return string sequence, and also return the BEST energies found
+    best_energies = np.array([best_E1, best_E2])
     final_seq_str = int_array_to_seq_str(seq)
+    best_seq_str = int_array_to_seq_str(best_seq)
     
-    return final_seq_str, acceptedornot, energy_history_seq_1[:save_idx], energy_history_seq_2[:save_idx], finalenergies
+    return final_seq_str, acceptedornot, energy_history_seq_1[:save_idx], energy_history_seq_2[:save_idx], finalenergies, best_energies, best_seq_str
 
 # --- NEW: Seeding helper ---
 @njit
