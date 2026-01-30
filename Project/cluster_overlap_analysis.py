@@ -37,6 +37,9 @@ ITERATIONS = 200_000          # MC iterations per trial
 N_TRIALS = 200                 # Number of trials per overlap value
 WHENTOSAVE = 0.01             # Save energy history every 1% of iterations
 
+# --- NORMALIZATION ---
+Z_SCORE = False               # If True, normalize distances using z-scores
+
 # --- OVERLAP CONFIGURATION ---
 # Reading frames: Frame 0 (overlap % 3 == 0), Frame +1 (% 3 == 1), Frame +2 (% 3 == 2)
 OVERLAP_START = 12            # Minimum overlap (nucleotides)
@@ -203,11 +206,16 @@ def run_single_simulation(args, params_cache, stats_cache, temps, iterations, wh
     }
 
 
-def aggregate_results(raw_results, pairs):
+def aggregate_results(raw_results, pairs, z_score=False):
     """
     Aggregate per-trial results into per-(pair, overlap) summaries.
 
     Matches the output format of the original notebook.
+
+    Args:
+        raw_results: List of result dictionaries from simulations
+        pairs: List of (pf1, pf2) tuples
+        z_score: If True, normalize distances by natural std dev
     """
     df = pd.DataFrame(raw_results)
 
@@ -223,6 +231,18 @@ def aggregate_results(raw_results, pairs):
         nat_std1 = group['Nat_Std1'].iloc[0]
         nat_std2 = group['Nat_Std2'].iloc[0]
 
+        # Compute distances - z-score normalized if enabled
+        if z_score:
+            dist_1 = np.mean(np.abs(E1_vals - nat_mean1) / nat_std1)
+            dist_2 = np.mean(np.abs(E2_vals - nat_mean2) / nat_std2)
+            min_dist_1 = group['min_dist1'].mean() / nat_std1
+            min_dist_2 = group['min_dist2'].mean() / nat_std2
+        else:
+            dist_1 = np.mean(np.abs(E1_vals - nat_mean1))
+            dist_2 = np.mean(np.abs(E2_vals - nat_mean2))
+            min_dist_1 = group['min_dist1'].mean()
+            min_dist_2 = group['min_dist2'].mean()
+
         summary.append({
             'PF1': pf1,
             'PF2': pf2,
@@ -236,10 +256,10 @@ def aggregate_results(raw_results, pairs):
             'Nat_Mean2': nat_mean2,
             'Nat_Std1': nat_std1,
             'Nat_Std2': nat_std2,
-            'Dist_1': np.mean(np.abs(E1_vals - nat_mean1)),
-            'Dist_2': np.mean(np.abs(E2_vals - nat_mean2)),
-            'Min_Dist_1': group['min_dist1'].mean(),
-            'Min_Dist_2': group['min_dist2'].mean(),
+            'Dist_1': dist_1,
+            'Dist_2': dist_2,
+            'Min_Dist_1': min_dist_1,
+            'Min_Dist_2': min_dist_2,
             'Iter_Converged_1': group['iter_conv1'].mean(),
             'Iter_Converged_2': group['iter_conv2'].mean()
         })
@@ -366,7 +386,7 @@ def main():
 
     # Aggregate results
     print("\nAggregating results...")
-    results_df = aggregate_results(completed_results, pairs)
+    results_df = aggregate_results(completed_results, pairs, z_score=Z_SCORE)
 
     # Save results
     output_path = os.path.join(args.output_dir, OUTPUT_FILE)

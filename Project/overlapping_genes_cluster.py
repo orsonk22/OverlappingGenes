@@ -68,6 +68,21 @@ def load_natural_energies(filename):
     return np.array(energies)
 
 
+def compute_z_score(energy, nat_mean, nat_std):
+    """
+    Compute z-score(s) using natural energy statistics as reference.
+
+    Args:
+        energy: Single energy value (float) or numpy array of energies
+        nat_mean: Mean of natural energy distribution
+        nat_std: Standard deviation of natural energy distribution
+
+    Returns:
+        z_score: Standardized value(s) where z=0 is natural mean, z=1 is +1 SD
+    """
+    return (energy - nat_mean) / nat_std
+
+
 def extract_params(params_file):
     """
     Extract J and h parameters from bmDCA parameter file.
