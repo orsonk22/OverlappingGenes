@@ -3,7 +3,9 @@
     "allow": [
       "Bash(conda activate:*)",
       "Bash(pip install:*)",
-      "Bash(conda run:*)"
+      "Bash(conda run:*)",
+      "Bash(ls:*)",
+      "Bash(grep:*)"
     ]
   }
 }

@@ -762,7 +762,7 @@ def split_sequence_and_to_numeric_out(sequence, len_1_n, len_2_n, aa_out_1, aa_o
 
 # --- MODIFIED: Main simulation loop (Optimized) ---
 @njit
-def overlapped_sequence_generator_int(DCA_params_1, DCA_params_2, initialsequence, T1=1.0, T2=1.0, numberofiterations=100000, quiet=False, whentosave=0.1, nat_mean1=None, nat_mean2=None):
+def overlapped_sequence_generator_int(DCA_params_1, DCA_params_2, initialsequence, T1=1.0, T2=1.0, numberofiterations=100000, quiet=False, whentosave=0.1, nat_mean1=None, nat_mean2=None, nat_std1=None, nat_std2=None, use_z_score=False):
     # Unpack params
     Jvec1, hvec1 = DCA_params_1[0], DCA_params_1[1]
     Jvec2, hvec2 = DCA_params_2[0], DCA_params_2[1]
@@ -817,8 +817,11 @@ def overlapped_sequence_generator_int(DCA_params_1, DCA_params_2, initialsequenc
     best_seq = seq.copy() # Store best sequence
     
     if nat_mean1 is not None and nat_mean2 is not None:
-        # Initial check
-        dist = abs(E1 - nat_mean1) + abs(E2 - nat_mean2)
+        # Initial check - use z-score if enabled
+        if use_z_score and nat_std1 is not None and nat_std2 is not None:
+            dist = abs(E1 - nat_mean1)/nat_std1 + abs(E2 - nat_mean2)/nat_std2
+        else:
+            dist = abs(E1 - nat_mean1) + abs(E2 - nat_mean2)
         min_dist = dist
 
     itera = 1
@@ -922,7 +925,10 @@ def overlapped_sequence_generator_int(DCA_params_1, DCA_params_2, initialsequenc
             
             # --- Track Best Energy (Closest to Natural) ---
             if nat_mean1 is not None and nat_mean2 is not None:
-                current_dist = abs(E1 - nat_mean1) + abs(E2 - nat_mean2)
+                if use_z_score and nat_std1 is not None and nat_std2 is not None:
+                    current_dist = abs(E1 - nat_mean1)/nat_std1 + abs(E2 - nat_mean2)/nat_std2
+                else:
+                    current_dist = abs(E1 - nat_mean1) + abs(E2 - nat_mean2)
                 if current_dist < min_dist:
                     min_dist = current_dist
                     best_E1 = E1
@@ -957,10 +963,11 @@ def overlapped_sequence_generator_int(DCA_params_1, DCA_params_2, initialsequenc
     return final_seq_str, acceptedornot, energy_history_seq_1[:save_idx], energy_history_seq_2[:save_idx], finalenergies, best_energies, best_seq_str
 
 @njit
-def overlapped_sequence_generator_best(DCA_params_1, DCA_params_2, initialsequence, target_E1, target_E2, T1=1.0, T2=1.0, numberofiterations=100000, quiet=False, whentosave=0.1):
+def overlapped_sequence_generator_best(DCA_params_1, DCA_params_2, initialsequence, target_E1, target_E2, T1=1.0, T2=1.0, numberofiterations=100000, quiet=False, whentosave=0.1, nat_std1=None, nat_std2=None, use_z_score=False):
     """
     Same as overlapped_sequence_generator_int, but returns the sequence that was Closest
     to the target energies (Euclidean distance in E1-E2 space), not the final sequence.
+    If use_z_score=True and nat_std values provided, uses z-score normalized distance.
     """
     # Unpack params
     Jvec1, hvec1 = DCA_params_1[0], DCA_params_1[1]
@@ -1010,7 +1017,10 @@ def overlapped_sequence_generator_best(DCA_params_1, DCA_params_2, initialsequen
     E = E1 + E2
 
     # Initial Best Check
-    dist_sq = (E1 - target_E1)**2 + (E2 - target_E2)**2
+    if use_z_score and nat_std1 is not None and nat_std2 is not None:
+        dist_sq = abs(E1 - target_E1)/nat_std1 + abs(E2 - target_E2)/nat_std2
+    else:
+        dist_sq = (E1 - target_E1)**2 + (E2 - target_E2)**2
     if dist_sq < min_dist_sq:
         min_dist_sq = dist_sq
         best_seq[:] = seq[:]
@@ -1114,7 +1124,10 @@ def overlapped_sequence_generator_best(DCA_params_1, DCA_params_2, initialsequen
             E = E1 + E2
             
             # Update Best Sequence if this accepted state is better
-            dist_sq = (E1 - target_E1)**2 + (E2 - target_E2)**2
+            if use_z_score and nat_std1 is not None and nat_std2 is not None:
+                dist_sq = abs(E1 - target_E1)/nat_std1 + abs(E2 - target_E2)/nat_std2
+            else:
+                dist_sq = (E1 - target_E1)**2 + (E2 - target_E2)**2
             if dist_sq < min_dist_sq:
                 min_dist_sq = dist_sq
                 best_seq[:] = seq[:]
@@ -1141,7 +1154,10 @@ def overlapped_sequence_generator_best(DCA_params_1, DCA_params_2, initialsequen
                 E2 = E2_check
                 E = E_check
                 # Re-check best (just in case)
-                dist_sq = (E1 - target_E1)**2 + (E2 - target_E2)**2
+                if use_z_score and nat_std1 is not None and nat_std2 is not None:
+                    dist_sq = abs(E1 - target_E1)/nat_std1 + abs(E2 - target_E2)/nat_std2
+                else:
+                    dist_sq = (E1 - target_E1)**2 + (E2 - target_E2)**2
                 if dist_sq < min_dist_sq:
                     min_dist_sq = dist_sq
                     best_seq[:] = seq[:]
