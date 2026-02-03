@@ -5,7 +5,8 @@
       "Bash(pip install:*)",
       "Bash(conda run:*)",
       "Bash(ls:*)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(python:*)"
     ]
   }
 }
