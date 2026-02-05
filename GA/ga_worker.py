@@ -272,6 +272,58 @@ def evaluate_population_parallel(population, seq_arr, mut_positions, mut_new_nts
 
 
 @njit
+def is_path_stop_codon_free(path_order, seq_arr, mut_positions, mut_new_nts,
+                             len_aa_1, len_aa_2):
+    """
+    Fast check if a path produces stop codons at any intermediate step.
+
+    Args:
+        path_order: Array of mutation indices defining the order
+        seq_arr: Starting sequence as uint8 array
+        mut_positions: Array of mutation positions
+        mut_new_nts: Array of new nucleotides for each mutation
+        len_aa_1: Length of protein 1 in amino acids (including stop)
+        len_aa_2: Length of protein 2 in amino acids (including stop)
+
+    Returns:
+        True if path is stop-codon free at all intermediate steps, False otherwise
+    """
+    current_seq = seq_arr.copy()
+    len_seq_1_n = len_aa_1 * 3
+    len_seq_2_n = len_aa_2 * 3
+
+    aa_seq_1 = np.empty(len_aa_1, dtype=np.int32)
+    aa_seq_2 = np.empty(len_aa_2, dtype=np.int32)
+    rc_buffer = np.empty(len_seq_2_n, dtype=np.uint8)
+
+    # Check initial sequence
+    og.split_sequence_and_to_numeric_out(current_seq, len_seq_1_n, len_seq_2_n,
+                                          aa_seq_1, aa_seq_2, rc_buffer)
+    for i in range(len_aa_1 - 1):
+        if aa_seq_1[i] == 21:
+            return False
+    for i in range(len_aa_2 - 1):
+        if aa_seq_2[i] == 21:
+            return False
+
+    # Check each intermediate step
+    for i in range(len(path_order)):
+        idx = path_order[i]
+        current_seq[mut_positions[idx]] = mut_new_nts[idx]
+
+        og.split_sequence_and_to_numeric_out(current_seq, len_seq_1_n, len_seq_2_n,
+                                              aa_seq_1, aa_seq_2, rc_buffer)
+        for j in range(len_aa_1 - 1):
+            if aa_seq_1[j] == 21:
+                return False
+        for j in range(len_aa_2 - 1):
+            if aa_seq_2[j] == 21:
+                return False
+
+    return True
+
+
+@njit
 def calculate_energies_separate(seq_str_arr, Jvec1, hvec1, Jvec2, hvec2, len_aa_1, len_aa_2):
     """
     Calculate E1 and E2 separately for an overlapping sequence (from string converted to array).
@@ -352,7 +404,8 @@ class GeneticPathFinder:
     def __init__(self, seq_start, seq_end,
                  Jvec1, hvec1, Jvec2, hvec2, len_aa_1, len_aa_2,
                  nat_mean_1, nat_mean_2, nat_std_1=None, nat_std_2=None, z_score=False,
-                 pop_size=50, n_generations=100, mutation_rate=0.15, elitism=0.1):
+                 pop_size=50, n_generations=100, mutation_rate=0.15, elitism=0.1,
+                 max_init_retries=1000, max_mutation_retries=10, max_crossover_retries=10):
         self.seq_start = seq_start
         self.seq_end = seq_end
         self.Jvec1 = Jvec1
@@ -372,6 +425,11 @@ class GeneticPathFinder:
         self.mutation_rate = mutation_rate
         self.elitism_count = max(1, int(elitism * pop_size))
 
+        # Retry parameters for stop-codon-free guarantee
+        self.max_init_retries = max_init_retries
+        self.max_mutation_retries = max_mutation_retries
+        self.max_crossover_retries = max_crossover_retries
+
         # Convert sequences to arrays for numba
         self.seq_arr = seq_to_array(seq_start)
         self.mut_positions, self.mut_old_nts, self.mut_new_nts = get_mutations_arrays(seq_start, seq_end)
@@ -381,11 +439,31 @@ class GeneticPathFinder:
         self.mutations = get_mutation_path(seq_start, seq_end)
         self.fitness_history = []
 
+    def _is_valid_path(self, path):
+        """Check if a path is stop-codon free at all intermediate steps."""
+        return is_path_stop_codon_free(
+            path, self.seq_arr, self.mut_positions, self.mut_new_nts,
+            self.len_aa_1, self.len_aa_2
+        )
+
     def initialize_population(self):
-        """Create initial random population as 2D numpy array."""
+        """Create initial random population as 2D numpy array.
+
+        Regenerates random permutations until each is stop-codon free.
+        Raises RuntimeError if a valid path cannot be found after max_init_retries.
+        """
         population = np.zeros((self.pop_size, self.n_mutations), dtype=np.int32)
         for i in range(self.pop_size):
-            population[i] = np.random.permutation(self.n_mutations)
+            for attempt in range(self.max_init_retries):
+                candidate = np.random.permutation(self.n_mutations).astype(np.int32)
+                if self._is_valid_path(candidate):
+                    population[i] = candidate
+                    break
+            else:
+                raise RuntimeError(
+                    f"Could not generate stop-codon-free path after {self.max_init_retries} attempts. "
+                    "The sequence pair may not have any valid evolutionary paths."
+                )
         return population
 
     def evaluate_population(self, population):
@@ -406,31 +484,54 @@ class GeneticPathFinder:
         return parents
 
     def crossover(self, parent1, parent2):
-        """Order crossover (OX1) for permutations."""
+        """Order crossover (OX1) for permutations with stop-codon-free guarantee.
+
+        Retries with different crossover points if child has stop codons.
+        Falls back to a random parent if no valid child found after max_crossover_retries.
+        """
         size = len(parent1)
         if size < 2:
             return parent1.copy()
-        start, end = sorted(np.random.choice(size, 2, replace=False))
 
-        child = np.full(size, -1, dtype=np.int32)
-        child[start:end] = parent1[start:end]
+        for _ in range(self.max_crossover_retries):
+            start, end = sorted(np.random.choice(size, 2, replace=False))
 
-        in_child = set(child[start:end])
-        p2_remaining = [x for x in parent2 if x not in in_child]
-        idx = 0
-        for i in range(size):
-            if child[i] == -1:
-                child[i] = p2_remaining[idx]
-                idx += 1
+            child = np.full(size, -1, dtype=np.int32)
+            child[start:end] = parent1[start:end]
 
-        return child
+            in_child = set(child[start:end])
+            p2_remaining = [x for x in parent2 if x not in in_child]
+            idx = 0
+            for i in range(size):
+                if child[i] == -1:
+                    child[i] = p2_remaining[idx]
+                    idx += 1
+
+            if self._is_valid_path(child):
+                return child
+
+        # Fallback to a random parent (which should already be valid)
+        return parent1.copy() if np.random.rand() < 0.5 else parent2.copy()
 
     def mutate(self, individual):
-        """Swap mutation for permutations."""
-        if np.random.rand() < self.mutation_rate and len(individual) >= 2:
-            i, j = np.random.choice(len(individual), 2, replace=False)
-            individual[i], individual[j] = individual[j], individual[i]
-        return individual
+        """Swap mutation for permutations with stop-codon-free guarantee.
+
+        Resamples swap positions if mutation creates stop codons.
+        Returns original if no valid swap found after max_mutation_retries.
+        """
+        if np.random.rand() >= self.mutation_rate or len(individual) < 2:
+            return individual
+
+        original = individual.copy()
+        for _ in range(self.max_mutation_retries):
+            candidate = original.copy()
+            i, j = np.random.choice(len(candidate), 2, replace=False)
+            candidate[i], candidate[j] = candidate[j], candidate[i]
+            if self._is_valid_path(candidate):
+                return candidate
+
+        # No valid swap found, return original unchanged
+        return original
 
     def run(self, verbose=False):
         if self.n_mutations == 0:
