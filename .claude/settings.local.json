@@ -6,7 +6,14 @@
       "Bash(conda run:*)",
       "Bash(ls:*)",
       "Bash(grep:*)",
-      "Bash(python:*)"
+      "Bash(python:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(jupyter nbconvert:*)",
+      "Bash(where:*)",
+      "Bash(findstr:*)",
+      "Bash(git:*)"
     ]
   }
 }

@@ -1579,6 +1579,144 @@ def overlapped_sequence_generator_selective(DCA_params_1, DCA_params_2, initials
     return itera, converged, E1, E2, final_seq_str
 
 
+@njit
+def mc_equilibrium_sampler(Jvec1, hvec1, Jvec2, hvec2, seq_int,
+                           T1, T2, n_burnin, n_samples, thin_interval):
+    """
+    Run a single MC chain to sample the equilibrium energy distribution.
+
+    Burn-in phase: n_burnin MC steps (no sampling) to equilibrate.
+    Sampling phase: collect n_samples energy pairs (E1, E2), separated
+    by thin_interval MC steps each to decorrelate samples.
+
+    Takes raw Jvec/hvec arrays (not list wrappers) for numba compatibility.
+
+    Returns (E1_samples, E2_samples, acceptance_rate).
+    """
+    seq = seq_int.copy()
+    sequence_L = len(seq)
+
+    # Lengths in nucleotides
+    len_seq_1_n = int(3 * len(hvec1) / 21 + 3)
+    len_seq_2_n = int(3 * len(hvec2) / 21 + 3)
+
+    # Lengths in AA (including stop)
+    len_aa_1 = len_seq_1_n // 3
+    len_aa_2 = len_seq_2_n // 3
+
+    # Pre-allocate working arrays
+    aa_seq_1 = np.empty(len_aa_1, dtype=np.int32)
+    aa_seq_2 = np.empty(len_aa_2, dtype=np.int32)
+    rc_buffer = np.empty(len_seq_2_n, dtype=np.uint8)
+    aa_seq_1_new = np.empty(len_aa_1, dtype=np.int32)
+    aa_seq_2_new = np.empty(len_aa_2, dtype=np.int32)
+
+    # Initial translation and energy
+    split_sequence_and_to_numeric_out(seq, len_seq_1_n, len_seq_2_n,
+                                      aa_seq_1, aa_seq_2, rc_buffer)
+    E1 = calculate_Energy(aa_seq_1[:-1], Jvec1, hvec1)
+    E2 = calculate_Energy(aa_seq_2[:-1], Jvec2, hvec2)
+
+    # Sample storage
+    E1_samples = np.empty(n_samples, dtype=np.float64)
+    E2_samples = np.empty(n_samples, dtype=np.float64)
+
+    accepted = 0
+    total_trials = 0
+    total_steps = n_burnin + n_samples * thin_interval
+
+    for step in range(total_steps):
+        # Collect sample at the right moments during sampling phase
+        if step >= n_burnin and (step - n_burnin) % thin_interval == 0:
+            idx = (step - n_burnin) // thin_interval
+            if idx < n_samples:
+                E1_samples[idx] = E1
+                E2_samples[idx] = E2
+
+        total_trials += 1
+
+        # 1. Mutate
+        new_position = np.random.randint(0, sequence_L)
+        old_nt = seq[new_position]
+        rand_idx = np.random.randint(0, 3)
+        if rand_idx >= old_nt:
+            rand_idx += 1
+        seq[new_position] = rand_idx
+
+        # 2. Translate
+        split_sequence_and_to_numeric_out(seq, len_seq_1_n, len_seq_2_n,
+                                          aa_seq_1_new, aa_seq_2_new, rc_buffer)
+
+        # 3. Check for stop codons
+        stop_codon_error = False
+        if aa_seq_1_new[len_aa_1 - 1] != 21 or aa_seq_2_new[len_aa_2 - 1] != 21:
+            stop_codon_error = True
+        else:
+            for i in range(len_aa_1 - 1):
+                if aa_seq_1_new[i] == 21:
+                    stop_codon_error = True
+                    break
+            if not stop_codon_error:
+                for i in range(len_aa_2 - 1):
+                    if aa_seq_2_new[i] == 21:
+                        stop_codon_error = True
+                        break
+
+        if stop_codon_error:
+            seq[new_position] = old_nt
+            continue
+
+        # 4. Calculate delta energies
+        delta_H_1 = 0.0
+        delta_H_2 = 0.0
+
+        aa_pos_1 = -1
+        new_aa_1 = -1
+        for i in range(len_aa_1 - 1):
+            if aa_seq_1[i] != aa_seq_1_new[i]:
+                aa_pos_1 = i
+                new_aa_1 = aa_seq_1_new[i]
+                break
+        if aa_pos_1 != -1:
+            delta_H_1 = calculate_Delta_Energy(aa_seq_1, Jvec1, hvec1,
+                                               aa_pos_1, new_aa_1)
+
+        aa_pos_2 = -1
+        new_aa_2 = -1
+        for i in range(len_aa_2 - 1):
+            if aa_seq_2[i] != aa_seq_2_new[i]:
+                aa_pos_2 = i
+                new_aa_2 = aa_seq_2_new[i]
+                break
+        if aa_pos_2 != -1:
+            delta_H_2 = calculate_Delta_Energy(aa_seq_2, Jvec2, hvec2,
+                                               aa_pos_2, new_aa_2)
+
+        # 5. Metropolis criterion
+        delta_H = (delta_H_1 / T1) + (delta_H_2 / T2)
+
+        accept = False
+        if delta_H <= 0:
+            accept = True
+        else:
+            if np.random.rand() < np.exp(-delta_H):
+                accept = True
+
+        if accept:
+            for i in range(len_aa_1):
+                aa_seq_1[i] = aa_seq_1_new[i]
+            for i in range(len_aa_2):
+                aa_seq_2[i] = aa_seq_2_new[i]
+            E1 += delta_H_1
+            E2 += delta_H_2
+            accepted += 1
+        else:
+            seq[new_position] = old_nt
+
+    acceptance_rate = accepted / total_trials
+    return E1_samples, E2_samples, acceptance_rate
+
+
 # =====================================================================
 # Replica Exchange (Parallel Tempering) MCMC
 # =====================================================================
@@ -1636,10 +1774,10 @@ def overlapped_sequence_generator_replica_exchange(
     rc_buffer = np.empty(len_seq_2_n, dtype=np.uint8)
 
     # ------------------------------------------------------------------
-    # Temperature ↔ configuration mapping
+    # Temperature <-> configuration mapping
     # ------------------------------------------------------------------
-    config_at_temp = np.arange(n_replicas, dtype=np.int64)  # temp → config
-    temp_of_config = np.arange(n_replicas, dtype=np.int64)  # config → temp
+    config_at_temp = np.arange(n_replicas, dtype=np.int64)  # temp -> config
+    temp_of_config = np.arange(n_replicas, dtype=np.int64)  # config -> temp
 
     # ------------------------------------------------------------------
     # Initial energies
@@ -1795,10 +1933,11 @@ def overlapped_sequence_generator_replica_exchange(
                 swap_attempt_counts[pair] += 1.0
 
                 # Z-score normalized swap criterion
+                # Δ = (β_cold − β_hot)(E_cold − E_hot)
                 delta = ((1.0 / T1_ladder[pair] - 1.0 / T1_ladder[pair + 1])
-                         * (E1[cj] - E1[ci]) / nat_std1
+                         * (E1[ci] - E1[cj]) / nat_std1
                          + (1.0 / T2_ladder[pair] - 1.0 / T2_ladder[pair + 1])
-                         * (E2[cj] - E2[ci]) / nat_std2)
+                         * (E2[ci] - E2[cj]) / nat_std2)
 
                 accepted_swap = 0.0
                 if delta >= 0.0 or np.random.rand() < np.exp(delta):
@@ -1886,8 +2025,6 @@ def run_replica_exchange(
     Builds temperature ladders, generates initial sequences,
     calls the JIT-compiled core, and returns a results dictionary.
     """
-    import json
-
     Jvec1, hvec1 = DCA_params_1[0], DCA_params_1[1]
     Jvec2, hvec2 = DCA_params_2[0], DCA_params_2[1]
 
@@ -1988,6 +2125,839 @@ def run_replica_exchange(
         'n_replicas': n_replicas,
         'n_iterations': n_iterations,
         'elapsed_time': elapsed,
+    }
+
+
+def extract_per_temp_samples(energy_history, replica_index_history,
+                              burn_fraction=0.3, thin=1):
+    """
+    Map per-configuration energy histories to per-temperature-rung samples.
+
+    At each save point, exactly one configuration sits at each rung
+    (permutation), so this collects one sample per rung per post-burn-in save.
+
+    Args:
+        energy_history: (n_configs, n_saves) float64 — energy of each config
+        replica_index_history: (n_configs, n_saves) int64 — rung index of each config
+        burn_fraction: fraction of saves to discard as burn-in
+        thin: keep every thin-th post-burn-in save
+
+    Returns:
+        per_temp_samples: (n_rungs, n_post_burn) float64 — energy samples per rung
+    """
+    n_configs, n_saves = energy_history.shape
+    burn_end = int(n_saves * burn_fraction)
+    post_burn_indices = list(range(burn_end, n_saves, thin))
+    n_post = len(post_burn_indices)
+
+    per_temp_samples = np.full((n_configs, n_post), np.nan)
+
+    for s_idx, save_t in enumerate(post_burn_indices):
+        for c in range(n_configs):
+            rung = int(replica_index_history[c, save_t])
+            per_temp_samples[rung, s_idx] = energy_history[c, save_t]
+
+    return per_temp_samples
+
+
+# =====================================================================
+# 2D Replica Exchange (Parallel Tempering on a T1 x T2 grid)
+# =====================================================================
+
+@njit(nogil=True)
+def re_2d_equilibrium_sampler(Jvec1, hvec1, Jvec2, hvec2,
+                               initial_sequences,   # (n_total, seq_len) uint8
+                               T1_grid, T2_grid,    # 1D float64
+                               n_burnin, n_samples, sample_interval,
+                               swap_interval,
+                               nat_std1, nat_std2,
+                               progress=None):
+    """
+    2D Replica Exchange sampler on a T1 x T2 grid.
+
+    Grid point (i,j) -> flat index k = i*n_T1 + j
+    where T1 = T1_grid[j], T2 = T2_grid[i].
+
+    4-phase swap cycle (rotated each swap_interval):
+      Phase 0: horizontal-even  (i,j)<->(i,j+1) for even j
+      Phase 1: vertical-even    (i,j)<->(i+1,j) for even i
+      Phase 2: horizontal-odd   (i,j)<->(i,j+1) for odd j
+      Phase 3: vertical-odd     (i,j)<->(i+1,j) for odd i
+
+    Returns:
+      (E1_samples, E2_samples, acceptance_rates,
+       swap_accepts_h, swap_attempts_h,
+       swap_accepts_v, swap_attempts_v)
+    """
+    n_T2 = len(T2_grid)  # rows (i index)
+    n_T1 = len(T1_grid)  # cols (j index)
+    n_total = n_T2 * n_T1
+    seq_length = initial_sequences.shape[1]
+
+    # Lengths
+    len_seq_1_n = int(3 * len(hvec1) / 21 + 3)
+    len_seq_2_n = int(3 * len(hvec2) / 21 + 3)
+    len_aa_1 = len_seq_1_n // 3
+    len_aa_2 = len_seq_2_n // 3
+
+    # Allocate per-configuration arrays
+    seqs = np.empty((n_total, seq_length), dtype=np.uint8)
+    for c in range(n_total):
+        for j in range(seq_length):
+            seqs[c, j] = initial_sequences[c, j]
+
+    E1 = np.empty(n_total, dtype=np.float64)
+    E2 = np.empty(n_total, dtype=np.float64)
+
+    aa_seq_1 = np.empty((n_total, len_aa_1), dtype=np.int32)
+    aa_seq_2 = np.empty((n_total, len_aa_2), dtype=np.int32)
+
+    aa_seq_1_new = np.empty(len_aa_1, dtype=np.int32)
+    aa_seq_2_new = np.empty(len_aa_2, dtype=np.int32)
+    rc_buffer = np.empty(len_seq_2_n, dtype=np.uint8)
+
+    # Grid point <-> configuration mapping
+    config_at_point = np.arange(n_total, dtype=np.int64)
+    point_of_config = np.arange(n_total, dtype=np.int64)
+
+    # Initial energies
+    for c in range(n_total):
+        split_sequence_and_to_numeric_out(
+            seqs[c], len_seq_1_n, len_seq_2_n,
+            aa_seq_1[c], aa_seq_2[c], rc_buffer)
+        E1[c] = calculate_Energy(aa_seq_1[c, :-1], Jvec1, hvec1)
+        E2[c] = calculate_Energy(aa_seq_2[c, :-1], Jvec2, hvec2)
+
+    # Sample storage
+    E1_samples = np.empty((n_total, n_samples), dtype=np.float64)
+    E2_samples = np.empty((n_total, n_samples), dtype=np.float64)
+    sample_count = 0
+
+    # Acceptance tracking
+    acceptance_counts = np.zeros(n_total, dtype=np.float64)
+    total_counts = np.zeros(n_total, dtype=np.float64)
+
+    # Swap tracking: horizontal (n_T2 rows, n_T1-1 pairs) and vertical (n_T2-1 pairs, n_T1 cols)
+    swap_accepts_h = np.zeros((n_T2, n_T1 - 1), dtype=np.float64)
+    swap_attempts_h = np.zeros((n_T2, n_T1 - 1), dtype=np.float64)
+    swap_accepts_v = np.zeros((n_T2 - 1, n_T1), dtype=np.float64)
+    swap_attempts_v = np.zeros((n_T2 - 1, n_T1), dtype=np.float64)
+
+    total_steps = n_burnin + n_samples * sample_interval
+    swap_phase = 0
+
+    for step in range(total_steps):
+        # --- MC step for every configuration ---
+        for k in range(n_total):
+            c = config_at_point[k]
+            # Grid indices from flat index k
+            i_row = k // n_T1
+            j_col = k % n_T1
+            T1_val = T1_grid[j_col]
+            T2_val = T2_grid[i_row]
+
+            total_counts[c] += 1.0
+
+            # 1. Random nucleotide mutation
+            new_position = np.random.randint(0, seq_length)
+            old_nt = seqs[c, new_position]
+            rand_idx = np.random.randint(0, 3)
+            if rand_idx >= old_nt:
+                rand_idx += 1
+            seqs[c, new_position] = np.uint8(rand_idx)
+
+            # 2. Translate
+            split_sequence_and_to_numeric_out(
+                seqs[c], len_seq_1_n, len_seq_2_n,
+                aa_seq_1_new, aa_seq_2_new, rc_buffer)
+
+            # 3. Stop codon check
+            stop_codon_error = False
+            if aa_seq_1_new[len_aa_1 - 1] != 21 or aa_seq_2_new[len_aa_2 - 1] != 21:
+                stop_codon_error = True
+            else:
+                for ii in range(len_aa_1 - 1):
+                    if aa_seq_1_new[ii] == 21:
+                        stop_codon_error = True
+                        break
+                if not stop_codon_error:
+                    for ii in range(len_aa_2 - 1):
+                        if aa_seq_2_new[ii] == 21:
+                            stop_codon_error = True
+                            break
+
+            if stop_codon_error:
+                seqs[c, new_position] = old_nt
+                continue
+
+            # 4. Delta energy
+            delta_H_1 = 0.0
+            delta_H_2 = 0.0
+
+            aa_pos_1 = -1
+            new_aa_1_val = -1
+            for ii in range(len_aa_1 - 1):
+                if aa_seq_1[c, ii] != aa_seq_1_new[ii]:
+                    aa_pos_1 = ii
+                    new_aa_1_val = aa_seq_1_new[ii]
+                    break
+            if aa_pos_1 != -1:
+                delta_H_1 = calculate_Delta_Energy(
+                    aa_seq_1[c], Jvec1, hvec1, aa_pos_1, new_aa_1_val)
+
+            aa_pos_2 = -1
+            new_aa_2_val = -1
+            for ii in range(len_aa_2 - 1):
+                if aa_seq_2[c, ii] != aa_seq_2_new[ii]:
+                    aa_pos_2 = ii
+                    new_aa_2_val = aa_seq_2_new[ii]
+                    break
+            if aa_pos_2 != -1:
+                delta_H_2 = calculate_Delta_Energy(
+                    aa_seq_2[c], Jvec2, hvec2, aa_pos_2, new_aa_2_val)
+
+            # 5. Metropolis criterion
+            delta_H = (delta_H_1 / nat_std1) / T1_val + (delta_H_2 / nat_std2) / T2_val
+
+            accept = False
+            if delta_H <= 0.0:
+                accept = True
+            else:
+                if np.random.rand() < np.exp(-delta_H):
+                    accept = True
+
+            if accept:
+                for ii in range(len_aa_1):
+                    aa_seq_1[c, ii] = aa_seq_1_new[ii]
+                for ii in range(len_aa_2):
+                    aa_seq_2[c, ii] = aa_seq_2_new[ii]
+                E1[c] += delta_H_1
+                E2[c] += delta_H_2
+                acceptance_counts[c] += 1.0
+            else:
+                seqs[c, new_position] = old_nt
+
+        # --- Swap attempts (4-phase cycle) ---
+        if step % swap_interval == 0 and step > 0:
+            if swap_phase == 0:
+                # Horizontal-even: swap (i,j)<->(i,j+1) for even j
+                for i_row in range(n_T2):
+                    for j_col in range(0, n_T1 - 1, 2):
+                        k_a = i_row * n_T1 + j_col
+                        k_b = i_row * n_T1 + j_col + 1
+                        c_a = config_at_point[k_a]
+                        c_b = config_at_point[k_b]
+                        swap_attempts_h[i_row, j_col] += 1.0
+                        # Δ = (β_a − β_b)(E_a − E_b); same T2, different T1
+                        delta = (1.0 / T1_grid[j_col] - 1.0 / T1_grid[j_col + 1]) * (E1[c_a] - E1[c_b]) / nat_std1
+                        if delta >= 0.0 or np.random.rand() < np.exp(delta):
+                            config_at_point[k_a] = c_b
+                            config_at_point[k_b] = c_a
+                            point_of_config[c_a] = k_b
+                            point_of_config[c_b] = k_a
+                            swap_accepts_h[i_row, j_col] += 1.0
+
+            elif swap_phase == 1:
+                # Vertical-even: swap (i,j)<->(i+1,j) for even i
+                for i_row in range(0, n_T2 - 1, 2):
+                    for j_col in range(n_T1):
+                        k_a = i_row * n_T1 + j_col
+                        k_b = (i_row + 1) * n_T1 + j_col
+                        c_a = config_at_point[k_a]
+                        c_b = config_at_point[k_b]
+                        swap_attempts_v[i_row, j_col] += 1.0
+                        # Δ = (β_a − β_b)(E_a − E_b); same T1, different T2
+                        delta = (1.0 / T2_grid[i_row] - 1.0 / T2_grid[i_row + 1]) * (E2[c_a] - E2[c_b]) / nat_std2
+                        if delta >= 0.0 or np.random.rand() < np.exp(delta):
+                            config_at_point[k_a] = c_b
+                            config_at_point[k_b] = c_a
+                            point_of_config[c_a] = k_b
+                            point_of_config[c_b] = k_a
+                            swap_accepts_v[i_row, j_col] += 1.0
+
+            elif swap_phase == 2:
+                # Horizontal-odd: swap (i,j)<->(i,j+1) for odd j
+                for i_row in range(n_T2):
+                    for j_col in range(1, n_T1 - 1, 2):
+                        k_a = i_row * n_T1 + j_col
+                        k_b = i_row * n_T1 + j_col + 1
+                        c_a = config_at_point[k_a]
+                        c_b = config_at_point[k_b]
+                        swap_attempts_h[i_row, j_col] += 1.0
+                        delta = (1.0 / T1_grid[j_col] - 1.0 / T1_grid[j_col + 1]) * (E1[c_a] - E1[c_b]) / nat_std1
+                        if delta >= 0.0 or np.random.rand() < np.exp(delta):
+                            config_at_point[k_a] = c_b
+                            config_at_point[k_b] = c_a
+                            point_of_config[c_a] = k_b
+                            point_of_config[c_b] = k_a
+                            swap_accepts_h[i_row, j_col] += 1.0
+
+            elif swap_phase == 3:
+                # Vertical-odd: swap (i,j)<->(i+1,j) for odd i
+                for i_row in range(1, n_T2 - 1, 2):
+                    for j_col in range(n_T1):
+                        k_a = i_row * n_T1 + j_col
+                        k_b = (i_row + 1) * n_T1 + j_col
+                        c_a = config_at_point[k_a]
+                        c_b = config_at_point[k_b]
+                        swap_attempts_v[i_row, j_col] += 1.0
+                        delta = (1.0 / T2_grid[i_row] - 1.0 / T2_grid[i_row + 1]) * (E2[c_a] - E2[c_b]) / nat_std2
+                        if delta >= 0.0 or np.random.rand() < np.exp(delta):
+                            config_at_point[k_a] = c_b
+                            config_at_point[k_b] = c_a
+                            point_of_config[c_a] = k_b
+                            point_of_config[c_b] = k_a
+                            swap_accepts_v[i_row, j_col] += 1.0
+
+            swap_phase = (swap_phase + 1) % 4
+
+        # --- Sampling ---
+        if step >= n_burnin and (step - n_burnin) % sample_interval == 0:
+            if sample_count < n_samples:
+                for k in range(n_total):
+                    c = config_at_point[k]
+                    E1_samples[k, sample_count] = E1[c]
+                    E2_samples[k, sample_count] = E2[c]
+                sample_count += 1
+
+        # --- Progress counter (for tqdm polling) ---
+        if progress is not None:
+            progress[0] = step + 1
+
+        # --- Sanity check every 1000 steps ---
+        if step % 1000 == 0 and step > 0:
+            for c in range(n_total):
+                E1_check = calculate_Energy(aa_seq_1[c, :-1], Jvec1, hvec1)
+                E2_check = calculate_Energy(aa_seq_2[c, :-1], Jvec2, hvec2)
+                if abs(E1_check - E1[c]) > 1e-4 or abs(E2_check - E2[c]) > 1e-4:
+                    E1[c] = E1_check
+                    E2[c] = E2_check
+
+    # Compute acceptance rates
+    acceptance_rates = np.zeros(n_total, dtype=np.float64)
+    for c in range(n_total):
+        if total_counts[c] > 0:
+            acceptance_rates[c] = acceptance_counts[c] / total_counts[c]
+
+    return (E1_samples[:, :sample_count], E2_samples[:, :sample_count],
+            acceptance_rates,
+            swap_accepts_h, swap_attempts_h,
+            swap_accepts_v, swap_attempts_v)
+
+
+# =====================================================================
+# 2D Replica Exchange — Parallel version (prange over replicas)
+# =====================================================================
+
+@njit(parallel=True, nogil=True)
+def re_2d_equilibrium_sampler_parallel(Jvec1, hvec1, Jvec2, hvec2,
+                                        initial_sequences,
+                                        T1_grid, T2_grid,
+                                        n_burnin, n_samples, sample_interval,
+                                        swap_interval,
+                                        nat_std1, nat_std2,
+                                        progress=None):
+    """
+    2D Replica Exchange sampler on a T1 x T2 grid — parallel version.
+
+    Identical to re_2d_equilibrium_sampler but batches swap_interval MC steps
+    per replica and uses prange over replicas for ~N_cores speedup.
+    """
+    n_T2 = len(T2_grid)
+    n_T1 = len(T1_grid)
+    n_total = n_T2 * n_T1
+    seq_length = initial_sequences.shape[1]
+
+    # Lengths
+    len_seq_1_n = int(3 * len(hvec1) / 21 + 3)
+    len_seq_2_n = int(3 * len(hvec2) / 21 + 3)
+    len_aa_1 = len_seq_1_n // 3
+    len_aa_2 = len_seq_2_n // 3
+
+    # Allocate per-configuration arrays
+    seqs = np.empty((n_total, seq_length), dtype=np.uint8)
+    for c in range(n_total):
+        for j in range(seq_length):
+            seqs[c, j] = initial_sequences[c, j]
+
+    E1 = np.empty(n_total, dtype=np.float64)
+    E2 = np.empty(n_total, dtype=np.float64)
+
+    aa_seq_1 = np.empty((n_total, len_aa_1), dtype=np.int32)
+    aa_seq_2 = np.empty((n_total, len_aa_2), dtype=np.int32)
+
+    # Per-replica temp buffers (instead of shared 1D arrays)
+    aa_seq_1_new = np.empty((n_total, len_aa_1), dtype=np.int32)
+    aa_seq_2_new = np.empty((n_total, len_aa_2), dtype=np.int32)
+    rc_buffer = np.empty((n_total, len_seq_2_n), dtype=np.uint8)
+
+    # Grid point <-> configuration mapping
+    config_at_point = np.arange(n_total, dtype=np.int64)
+    point_of_config = np.arange(n_total, dtype=np.int64)
+
+    # Initial energies (uses per-replica rc_buffer)
+    for c in range(n_total):
+        split_sequence_and_to_numeric_out(
+            seqs[c], len_seq_1_n, len_seq_2_n,
+            aa_seq_1[c], aa_seq_2[c], rc_buffer[c])
+        E1[c] = calculate_Energy(aa_seq_1[c, :-1], Jvec1, hvec1)
+        E2[c] = calculate_Energy(aa_seq_2[c, :-1], Jvec2, hvec2)
+
+    # Sample storage
+    E1_samples = np.empty((n_total, n_samples), dtype=np.float64)
+    E2_samples = np.empty((n_total, n_samples), dtype=np.float64)
+    sample_count = 0
+
+    # Acceptance tracking
+    acceptance_counts = np.zeros(n_total, dtype=np.float64)
+    total_counts = np.zeros(n_total, dtype=np.float64)
+
+    # Swap tracking
+    swap_accepts_h = np.zeros((n_T2, n_T1 - 1), dtype=np.float64)
+    swap_attempts_h = np.zeros((n_T2, n_T1 - 1), dtype=np.float64)
+    swap_accepts_v = np.zeros((n_T2 - 1, n_T1), dtype=np.float64)
+    swap_attempts_v = np.zeros((n_T2 - 1, n_T1), dtype=np.float64)
+
+    total_steps = n_burnin + n_samples * sample_interval
+    swap_phase = 0
+
+    n_swap_rounds = total_steps // swap_interval
+    remainder = total_steps % swap_interval
+    sanity_interval = 200  # sanity check every this many swap rounds
+
+    for swap_round in range(n_swap_rounds):
+        step_start = swap_round * swap_interval
+
+        # --- Parallel MC steps for all replicas ---
+        for k in prange(n_total):
+            c = config_at_point[k]
+            i_row = k // n_T1
+            j_col = k % n_T1
+            T1_val = T1_grid[j_col]
+            T2_val = T2_grid[i_row]
+
+            for _s in range(swap_interval):
+                total_counts[c] += 1.0
+
+                # 1. Random nucleotide mutation
+                new_position = np.random.randint(0, seq_length)
+                old_nt = seqs[c, new_position]
+                rand_idx = np.random.randint(0, 3)
+                if rand_idx >= old_nt:
+                    rand_idx += 1
+                seqs[c, new_position] = np.uint8(rand_idx)
+
+                # 2. Translate
+                split_sequence_and_to_numeric_out(
+                    seqs[c], len_seq_1_n, len_seq_2_n,
+                    aa_seq_1_new[k], aa_seq_2_new[k], rc_buffer[k])
+
+                # 3. Stop codon check
+                stop_codon_error = False
+                if aa_seq_1_new[k, len_aa_1 - 1] != 21 or aa_seq_2_new[k, len_aa_2 - 1] != 21:
+                    stop_codon_error = True
+                else:
+                    for ii in range(len_aa_1 - 1):
+                        if aa_seq_1_new[k, ii] == 21:
+                            stop_codon_error = True
+                            break
+                    if not stop_codon_error:
+                        for ii in range(len_aa_2 - 1):
+                            if aa_seq_2_new[k, ii] == 21:
+                                stop_codon_error = True
+                                break
+
+                if stop_codon_error:
+                    seqs[c, new_position] = old_nt
+                    continue
+
+                # 4. Delta energy
+                delta_H_1 = 0.0
+                delta_H_2 = 0.0
+
+                aa_pos_1 = -1
+                new_aa_1_val = -1
+                for ii in range(len_aa_1 - 1):
+                    if aa_seq_1[c, ii] != aa_seq_1_new[k, ii]:
+                        aa_pos_1 = ii
+                        new_aa_1_val = aa_seq_1_new[k, ii]
+                        break
+                if aa_pos_1 != -1:
+                    delta_H_1 = calculate_Delta_Energy(
+                        aa_seq_1[c], Jvec1, hvec1, aa_pos_1, new_aa_1_val)
+
+                aa_pos_2 = -1
+                new_aa_2_val = -1
+                for ii in range(len_aa_2 - 1):
+                    if aa_seq_2[c, ii] != aa_seq_2_new[k, ii]:
+                        aa_pos_2 = ii
+                        new_aa_2_val = aa_seq_2_new[k, ii]
+                        break
+                if aa_pos_2 != -1:
+                    delta_H_2 = calculate_Delta_Energy(
+                        aa_seq_2[c], Jvec2, hvec2, aa_pos_2, new_aa_2_val)
+
+                # 5. Metropolis criterion
+                delta_H = (delta_H_1 / nat_std1) / T1_val + (delta_H_2 / nat_std2) / T2_val
+
+                accept = False
+                if delta_H <= 0.0:
+                    accept = True
+                else:
+                    if np.random.rand() < np.exp(-delta_H):
+                        accept = True
+
+                if accept:
+                    for ii in range(len_aa_1):
+                        aa_seq_1[c, ii] = aa_seq_1_new[k, ii]
+                    for ii in range(len_aa_2):
+                        aa_seq_2[c, ii] = aa_seq_2_new[k, ii]
+                    E1[c] += delta_H_1
+                    E2[c] += delta_H_2
+                    acceptance_counts[c] += 1.0
+                else:
+                    seqs[c, new_position] = old_nt
+
+        # --- Swap attempts (4-phase cycle, sequential) ---
+        # Skip swap on round 0 (matches original: step > 0)
+        if swap_round > 0:
+            if swap_phase == 0:
+                for i_row in range(n_T2):
+                    for j_col in range(0, n_T1 - 1, 2):
+                        k_a = i_row * n_T1 + j_col
+                        k_b = i_row * n_T1 + j_col + 1
+                        c_a = config_at_point[k_a]
+                        c_b = config_at_point[k_b]
+                        swap_attempts_h[i_row, j_col] += 1.0
+                        delta = (1.0 / T1_grid[j_col] - 1.0 / T1_grid[j_col + 1]) * (E1[c_a] - E1[c_b]) / nat_std1
+                        if delta >= 0.0 or np.random.rand() < np.exp(delta):
+                            config_at_point[k_a] = c_b
+                            config_at_point[k_b] = c_a
+                            point_of_config[c_a] = k_b
+                            point_of_config[c_b] = k_a
+                            swap_accepts_h[i_row, j_col] += 1.0
+
+            elif swap_phase == 1:
+                for i_row in range(0, n_T2 - 1, 2):
+                    for j_col in range(n_T1):
+                        k_a = i_row * n_T1 + j_col
+                        k_b = (i_row + 1) * n_T1 + j_col
+                        c_a = config_at_point[k_a]
+                        c_b = config_at_point[k_b]
+                        swap_attempts_v[i_row, j_col] += 1.0
+                        delta = (1.0 / T2_grid[i_row] - 1.0 / T2_grid[i_row + 1]) * (E2[c_a] - E2[c_b]) / nat_std2
+                        if delta >= 0.0 or np.random.rand() < np.exp(delta):
+                            config_at_point[k_a] = c_b
+                            config_at_point[k_b] = c_a
+                            point_of_config[c_a] = k_b
+                            point_of_config[c_b] = k_a
+                            swap_accepts_v[i_row, j_col] += 1.0
+
+            elif swap_phase == 2:
+                for i_row in range(n_T2):
+                    for j_col in range(1, n_T1 - 1, 2):
+                        k_a = i_row * n_T1 + j_col
+                        k_b = i_row * n_T1 + j_col + 1
+                        c_a = config_at_point[k_a]
+                        c_b = config_at_point[k_b]
+                        swap_attempts_h[i_row, j_col] += 1.0
+                        delta = (1.0 / T1_grid[j_col] - 1.0 / T1_grid[j_col + 1]) * (E1[c_a] - E1[c_b]) / nat_std1
+                        if delta >= 0.0 or np.random.rand() < np.exp(delta):
+                            config_at_point[k_a] = c_b
+                            config_at_point[k_b] = c_a
+                            point_of_config[c_a] = k_b
+                            point_of_config[c_b] = k_a
+                            swap_accepts_h[i_row, j_col] += 1.0
+
+            elif swap_phase == 3:
+                for i_row in range(1, n_T2 - 1, 2):
+                    for j_col in range(n_T1):
+                        k_a = i_row * n_T1 + j_col
+                        k_b = (i_row + 1) * n_T1 + j_col
+                        c_a = config_at_point[k_a]
+                        c_b = config_at_point[k_b]
+                        swap_attempts_v[i_row, j_col] += 1.0
+                        delta = (1.0 / T2_grid[i_row] - 1.0 / T2_grid[i_row + 1]) * (E2[c_a] - E2[c_b]) / nat_std2
+                        if delta >= 0.0 or np.random.rand() < np.exp(delta):
+                            config_at_point[k_a] = c_b
+                            config_at_point[k_b] = c_a
+                            point_of_config[c_a] = k_b
+                            point_of_config[c_b] = k_a
+                            swap_accepts_v[i_row, j_col] += 1.0
+
+            swap_phase = (swap_phase + 1) % 4
+
+        # --- Sampling ---
+        # Check if any step in [step_start, step_start + swap_interval) is a sample step
+        step_end = step_start + swap_interval
+        if step_end > n_burnin:
+            # Find sample steps in this range
+            # Sample at steps: n_burnin, n_burnin + sample_interval, n_burnin + 2*sample_interval, ...
+            if step_start < n_burnin:
+                first_eligible = n_burnin
+            else:
+                first_eligible = step_start
+            # Find first sample step >= first_eligible
+            if first_eligible <= n_burnin:
+                first_sample_step = n_burnin
+            else:
+                # Number of sample intervals past burnin
+                offset = first_eligible - n_burnin
+                intervals_past = (offset + sample_interval - 1) // sample_interval
+                first_sample_step = n_burnin + intervals_past * sample_interval
+            # Collect all sample steps in this range
+            s_step = first_sample_step
+            while s_step < step_end and sample_count < n_samples:
+                for k in range(n_total):
+                    c = config_at_point[k]
+                    E1_samples[k, sample_count] = E1[c]
+                    E2_samples[k, sample_count] = E2[c]
+                sample_count += 1
+                s_step += sample_interval
+
+        # --- Sanity check (every sanity_interval swap rounds) ---
+        if swap_round % sanity_interval == 0 and swap_round > 0:
+            for c in range(n_total):
+                E1_check = calculate_Energy(aa_seq_1[c, :-1], Jvec1, hvec1)
+                E2_check = calculate_Energy(aa_seq_2[c, :-1], Jvec2, hvec2)
+                if abs(E1_check - E1[c]) > 1e-4 or abs(E2_check - E2[c]) > 1e-4:
+                    E1[c] = E1_check
+                    E2[c] = E2_check
+
+        # --- Progress ---
+        if progress is not None:
+            progress[0] = step_end
+
+    # --- Handle remainder steps (serial) ---
+    if remainder > 0:
+        rem_start = n_swap_rounds * swap_interval
+        for step in range(rem_start, rem_start + remainder):
+            for k in range(n_total):
+                c = config_at_point[k]
+                i_row = k // n_T1
+                j_col = k % n_T1
+                T1_val = T1_grid[j_col]
+                T2_val = T2_grid[i_row]
+
+                total_counts[c] += 1.0
+
+                new_position = np.random.randint(0, seq_length)
+                old_nt = seqs[c, new_position]
+                rand_idx = np.random.randint(0, 3)
+                if rand_idx >= old_nt:
+                    rand_idx += 1
+                seqs[c, new_position] = np.uint8(rand_idx)
+
+                split_sequence_and_to_numeric_out(
+                    seqs[c], len_seq_1_n, len_seq_2_n,
+                    aa_seq_1_new[k], aa_seq_2_new[k], rc_buffer[k])
+
+                stop_codon_error = False
+                if aa_seq_1_new[k, len_aa_1 - 1] != 21 or aa_seq_2_new[k, len_aa_2 - 1] != 21:
+                    stop_codon_error = True
+                else:
+                    for ii in range(len_aa_1 - 1):
+                        if aa_seq_1_new[k, ii] == 21:
+                            stop_codon_error = True
+                            break
+                    if not stop_codon_error:
+                        for ii in range(len_aa_2 - 1):
+                            if aa_seq_2_new[k, ii] == 21:
+                                stop_codon_error = True
+                                break
+
+                if stop_codon_error:
+                    seqs[c, new_position] = old_nt
+                    continue
+
+                delta_H_1 = 0.0
+                delta_H_2 = 0.0
+
+                aa_pos_1 = -1
+                new_aa_1_val = -1
+                for ii in range(len_aa_1 - 1):
+                    if aa_seq_1[c, ii] != aa_seq_1_new[k, ii]:
+                        aa_pos_1 = ii
+                        new_aa_1_val = aa_seq_1_new[k, ii]
+                        break
+                if aa_pos_1 != -1:
+                    delta_H_1 = calculate_Delta_Energy(
+                        aa_seq_1[c], Jvec1, hvec1, aa_pos_1, new_aa_1_val)
+
+                aa_pos_2 = -1
+                new_aa_2_val = -1
+                for ii in range(len_aa_2 - 1):
+                    if aa_seq_2[c, ii] != aa_seq_2_new[k, ii]:
+                        aa_pos_2 = ii
+                        new_aa_2_val = aa_seq_2_new[k, ii]
+                        break
+                if aa_pos_2 != -1:
+                    delta_H_2 = calculate_Delta_Energy(
+                        aa_seq_2[c], Jvec2, hvec2, aa_pos_2, new_aa_2_val)
+
+                delta_H = (delta_H_1 / nat_std1) / T1_val + (delta_H_2 / nat_std2) / T2_val
+
+                accept = False
+                if delta_H <= 0.0:
+                    accept = True
+                else:
+                    if np.random.rand() < np.exp(-delta_H):
+                        accept = True
+
+                if accept:
+                    for ii in range(len_aa_1):
+                        aa_seq_1[c, ii] = aa_seq_1_new[k, ii]
+                    for ii in range(len_aa_2):
+                        aa_seq_2[c, ii] = aa_seq_2_new[k, ii]
+                    E1[c] += delta_H_1
+                    E2[c] += delta_H_2
+                    acceptance_counts[c] += 1.0
+                else:
+                    seqs[c, new_position] = old_nt
+
+            # Sampling in remainder
+            if step >= n_burnin and (step - n_burnin) % sample_interval == 0:
+                if sample_count < n_samples:
+                    for k in range(n_total):
+                        c = config_at_point[k]
+                        E1_samples[k, sample_count] = E1[c]
+                        E2_samples[k, sample_count] = E2[c]
+                    sample_count += 1
+
+            if progress is not None:
+                progress[0] = step + 1
+
+    # Compute acceptance rates
+    acceptance_rates = np.zeros(n_total, dtype=np.float64)
+    for c in range(n_total):
+        if total_counts[c] > 0:
+            acceptance_rates[c] = acceptance_counts[c] / total_counts[c]
+
+    return (E1_samples[:, :sample_count], E2_samples[:, :sample_count],
+            acceptance_rates,
+            swap_accepts_h, swap_attempts_h,
+            swap_accepts_v, swap_attempts_v)
+
+
+def run_2d_replica_exchange(
+    DCA_params_1, DCA_params_2,
+    prot1_len, prot2_len, overlap,
+    T1_grid, T2_grid,
+    n_burnin=200_000, n_samples=1000, sample_interval=200,
+    swap_interval=50,
+    nat_std1=1.0, nat_std2=1.0,
+):
+    """
+    Python wrapper for the 2D Replica Exchange sampler.
+
+    Generates initial sequences, calls JIT core, reshapes flat outputs
+    to (n_T2, n_T1, ...) grids.
+    """
+    Jvec1, hvec1 = DCA_params_1[0], DCA_params_1[1]
+    Jvec2, hvec2 = DCA_params_2[0], DCA_params_2[1]
+
+    n_T2 = len(T2_grid)
+    n_T1 = len(T1_grid)
+    n_total = n_T2 * n_T1
+
+    # Generate initial sequences
+    len_seq_1_n = int(3 * len(hvec1) / 21 + 3)
+    len_seq_2_n = int(3 * len(hvec2) / 21 + 3)
+    seq_length = len_seq_1_n + len_seq_2_n - overlap
+
+    initial_seqs = np.empty((n_total, seq_length), dtype=np.uint8)
+    for idx in range(n_total):
+        s = initial_seq_no_stops(prot1_len, prot2_len, overlap, quiet=True)
+        initial_seqs[idx] = seq_str_to_int_array(s)
+
+    # Ensure float64
+    Jvec1 = np.asarray(Jvec1, dtype=np.float64)
+    hvec1 = np.asarray(hvec1, dtype=np.float64)
+    Jvec2 = np.asarray(Jvec2, dtype=np.float64)
+    hvec2 = np.asarray(hvec2, dtype=np.float64)
+    T1_grid_f = np.asarray(T1_grid, dtype=np.float64)
+    T2_grid_f = np.asarray(T2_grid, dtype=np.float64)
+
+    print(f"2D RE: {n_T2}x{n_T1} = {n_total} replicas")
+    print(f"  T1 range: [{T1_grid_f[0]:.3f}, {T1_grid_f[-1]:.3f}]")
+    print(f"  T2 range: [{T2_grid_f[0]:.3f}, {T2_grid_f[-1]:.3f}]")
+    print(f"  Burn-in: {n_burnin}, Samples: {n_samples}, "
+          f"Sample interval: {sample_interval}, Swap interval: {swap_interval}")
+
+    total_steps = n_burnin + n_samples * sample_interval
+    progress = np.zeros(1, dtype=np.int64)
+
+    import threading
+    result_container = [None]
+    exc_container = [None]
+
+    def _run():
+        try:
+            result_container[0] = re_2d_equilibrium_sampler_parallel(
+                Jvec1, hvec1, Jvec2, hvec2,
+                initial_seqs,
+                T1_grid_f, T2_grid_f,
+                n_burnin, n_samples, sample_interval,
+                swap_interval,
+                float(nat_std1), float(nat_std2),
+                progress)
+        except Exception as e:
+            exc_container[0] = e
+
+    start = time.time()
+    thread = threading.Thread(target=_run)
+    thread.start()
+
+    try:
+        from tqdm.auto import tqdm
+        with tqdm(total=total_steps, desc="2D RE", unit="step",
+                  bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}]") as pbar:
+            while thread.is_alive():
+                thread.join(timeout=0.5)
+                current = int(progress[0])
+                pbar.update(current - pbar.n)
+            pbar.update(total_steps - pbar.n)
+    except ImportError:
+        thread.join()
+
+    if exc_container[0] is not None:
+        raise exc_container[0]
+
+    result = result_container[0]
+    elapsed = time.time() - start
+
+    (E1_flat, E2_flat, acc_rates,
+     swap_acc_h, swap_att_h, swap_acc_v, swap_att_v) = result
+
+    actual_samples = E1_flat.shape[1]
+
+    # Reshape flat (n_total, n_samples) -> (n_T2, n_T1, n_samples)
+    E1_grid = E1_flat.reshape(n_T2, n_T1, actual_samples)
+    E2_grid = E2_flat.reshape(n_T2, n_T1, actual_samples)
+    acc_grid = acc_rates.reshape(n_T2, n_T1)
+
+    # Swap rates
+    swap_rates_h = np.zeros_like(swap_acc_h)
+    mask_h = swap_att_h > 0
+    swap_rates_h[mask_h] = swap_acc_h[mask_h] / swap_att_h[mask_h]
+
+    swap_rates_v = np.zeros_like(swap_acc_v)
+    mask_v = swap_att_v > 0
+    swap_rates_v[mask_v] = swap_acc_v[mask_v] / swap_att_v[mask_v]
+
+    print(f"2D RE completed in {elapsed:.2f}s ({actual_samples} samples collected)")
+    print(f"  Mean swap rate H: {np.mean(swap_rates_h):.3f}, V: {np.mean(swap_rates_v):.3f}")
+
+    return {
+        'E1_grid': E1_grid,
+        'E2_grid': E2_grid,
+        'acceptance_grid': acc_grid,
+        'swap_rates_h': swap_rates_h,
+        'swap_rates_v': swap_rates_v,
+        'T1_grid': T1_grid_f,
+        'T2_grid': T2_grid_f,
+        'elapsed_time': elapsed,
+        'n_samples': actual_samples,
     }
 
 
