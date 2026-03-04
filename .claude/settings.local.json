@@ -13,7 +13,14 @@
       "Bash(jupyter nbconvert:*)",
       "Bash(where:*)",
       "Bash(findstr:*)",
-      "Bash(git:*)"
+      "Bash(git:*)",
+      "Bash(find:*)",
+      "Bash(cat:*)",
+      "Bash(python3:*)",
+      "Bash(\"/c/Program Files/Python313/python\":*)",
+      "WebSearch",
+      "WebFetch(domain:uclphysast.github.io)",
+      "Bash(bash:*)"
     ]
   }
 }
