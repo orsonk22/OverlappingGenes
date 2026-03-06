@@ -253,13 +253,17 @@ def process_overlap(overlap_len, params, nat_stats, nat_energies,
         'prot2_len': prot2_len,
     }
 
-    # Memory-mapped temp files for energy samples
+    # Single-repeat mmap (1 repeat at a time instead of all n_repeats)
     mmap_E1_path = os.path.join(tmp_dir, f"E1_ov{overlap_len}.dat")
     mmap_E2_path = os.path.join(tmp_dir, f"E2_ov{overlap_len}.dat")
-    mmap_shape = (n_repeats, n_t2_fine, n_t1_fine, n_samples)
+    mmap_shape = (n_t2_fine, n_t1_fine, n_samples)
 
     E1_mmap = np.memmap(mmap_E1_path, dtype=np.float64, mode='w+', shape=mmap_shape)
     E2_mmap = np.memmap(mmap_E2_path, dtype=np.float64, mode='w+', shape=mmap_shape)
+
+    # Keep repeat 0 energies in RAM for final best-point extraction
+    E1_rep0 = None
+    E2_rep0 = None
 
     # Small metric arrays (kept in RAM)
     z_all = np.full((n_repeats, n_t2_fine, n_t1_fine), np.nan)
@@ -277,7 +281,14 @@ def process_overlap(overlap_len, params, nat_stats, nat_energies,
             wass_all[:start_repeat] = ov_ckpt['wass_all'][:start_repeat]
             acc_all[:start_repeat] = ov_ckpt['acc_all'][:start_repeat]
             run_diagnostics = list(ov_ckpt.get('run_diagnostics', []))
-            print(f"  Resuming from repeat {start_repeat}/{n_repeats}")
+            E1_rep0 = ov_ckpt.get('E1_rep0')
+            E2_rep0 = ov_ckpt.get('E2_rep0')
+            # If old checkpoint lacks rep0 energies, re-run repeat 0
+            if E1_rep0 is None and start_repeat > 0:
+                print(f"  Checkpoint missing rep0 energies, resetting to repeat 0")
+                start_repeat = 0
+            else:
+                print(f"  Resuming from repeat {start_repeat}/{n_repeats}")
 
     pool_size = min(n_workers, n_stagger ** 2)
 
@@ -305,15 +316,15 @@ def process_overlap(overlap_len, params, nat_stats, nat_energies,
                   initargs=(shared_data,)) as pool:
             results = pool.map(run_single_stagger, work_items)
 
-        # Assemble results into fine grid
+        # Assemble results into fine grid (reuse single-repeat mmap)
         for res in results:
             a, b = res['a'], res['b']
             for i in range(n_t2):
                 for j in range(n_t1):
                     i_fine = b + i * n_stagger
                     j_fine = a + j * n_stagger
-                    E1_mmap[r, i_fine, j_fine, :] = res['E1_grid'][i, j]
-                    E2_mmap[r, i_fine, j_fine, :] = res['E2_grid'][i, j]
+                    E1_mmap[i_fine, j_fine, :] = res['E1_grid'][i, j]
+                    E2_mmap[i_fine, j_fine, :] = res['E2_grid'][i, j]
                     acc_all[r, i_fine, j_fine] = res['acceptance_grid'][i, j]
 
             mean_swap_h = float(np.mean(res['swap_rates_h']))
@@ -330,13 +341,18 @@ def process_overlap(overlap_len, params, nat_stats, nat_energies,
         E1_mmap.flush()
         E2_mmap.flush()
 
+        # Save repeat 0 energies in RAM for final extraction
+        if r == 0:
+            E1_rep0 = np.array(E1_mmap)
+            E2_rep0 = np.array(E2_mmap)
+
         # Compute per-repeat metrics from mmap
         z_all[r] = compute_z_score(
-            E1_mmap[r], E2_mmap[r],
+            E1_mmap, E2_mmap,
             nat_mean1, nat_std1, nat_mean2, nat_std2
         )
         wass_all[r] = compute_wasserstein(
-            E1_mmap[r], E2_mmap[r],
+            E1_mmap, E2_mmap,
             nat_energies[pf1], nat_energies[pf2],
             n_t2_fine, n_t1_fine
         )
@@ -346,7 +362,7 @@ def process_overlap(overlap_len, params, nat_stats, nat_energies,
               f"(z_min={np.nanmin(z_all[r]):.3f}, wass_min={np.nanmin(wass_all[r]):.2f})")
 
         # Yield checkpoint data
-        yield {
+        ckpt = {
             'type': 'checkpoint',
             'overlap_len': overlap_len,
             'completed_repeats': r + 1,
@@ -355,6 +371,10 @@ def process_overlap(overlap_len, params, nat_stats, nat_energies,
             'acc_all': acc_all[:r+1].copy(),
             'run_diagnostics': list(run_diagnostics),
         }
+        if E1_rep0 is not None:
+            ckpt['E1_rep0'] = E1_rep0
+            ckpt['E2_rep0'] = E2_rep0
+        yield ckpt
 
     # All repeats done — compute final metrics
     z_mean = np.mean(z_all, axis=0)
@@ -373,17 +393,17 @@ def process_overlap(overlap_len, params, nat_stats, nat_energies,
     z_best_idx = find_best_n(z_mean, 5)
     wass_best_idx = find_best_n(wass_mean, 5)
 
-    # Extract energy samples at best points (1 representative repeat = repeat 0)
-    def extract_best_energies(mmap, indices, rep=0):
+    # Extract energy samples at best points from repeat 0 (kept in RAM)
+    def extract_best_energies(E_rep0, indices):
         E_list = []
         for idx in indices:
-            E_list.append(mmap[rep, idx[0], idx[1], :].copy())
+            E_list.append(E_rep0[idx[0], idx[1], :].copy())
         return np.array(E_list)
 
-    z_best_E1 = extract_best_energies(E1_mmap, z_best_idx)
-    z_best_E2 = extract_best_energies(E2_mmap, z_best_idx)
-    wass_best_E1 = extract_best_energies(E1_mmap, wass_best_idx)
-    wass_best_E2 = extract_best_energies(E2_mmap, wass_best_idx)
+    z_best_E1 = extract_best_energies(E1_rep0, z_best_idx)
+    z_best_E2 = extract_best_energies(E2_rep0, z_best_idx)
+    wass_best_E1 = extract_best_energies(E1_rep0, wass_best_idx)
+    wass_best_E2 = extract_best_energies(E2_rep0, wass_best_idx)
 
     # Swap diagnostic summary
     swap_summary = {

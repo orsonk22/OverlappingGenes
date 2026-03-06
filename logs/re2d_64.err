@@ -1,0 +1,86 @@
+Exception ignored in atexit callback <function _exit_function at 0x7f2aa438d260>:
+Traceback (most recent call last):
+  File "/home/xzccaogk/miniforge3/lib/python3.13/multiprocessing/util.py", line 391, in _exit_function
+    def _exit_function(info=info, debug=debug, _run_finalizers=_run_finalizers,
+  File "/home/xzccaogk/OverlappingGenes/re_2d_cluster.py", line 440, in sigterm_handler
+    sys.exit(0)
+SystemExit: 0
+Process ForkPoolWorker-23:
+Process ForkPoolWorker-24:
+Process ForkPoolWorker-25:
+Process ForkPoolWorker-22:
+Traceback (most recent call last):
+Traceback (most recent call last):
+  File "/home/xzccaogk/miniforge3/lib/python3.13/multiprocessing/process.py", line 313, in _bootstrap
+    self.run()
+    ~~~~~~~~^^
+  File "/home/xzccaogk/miniforge3/lib/python3.13/multiprocessing/process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/xzccaogk/miniforge3/lib/python3.13/multiprocessing/pool.py", line 140, in worker
+    util.debug('worker exiting after %d tasks' % completed)
+               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~
+  File "/home/xzccaogk/OverlappingGenes/re_2d_cluster.py", line 438, in sigterm_handler
+    save_checkpoint(ckpt_path, data)
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/xzccaogk/OverlappingGenes/re_2d_cluster.py", line 181, in save_checkpoint
+    os.replace(tmp_path, ckpt_path)
+    ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+Traceback (most recent call last):
+FileNotFoundError: [Errno 2] No such file or directory: '/home/xzccaogk/OverlappingGenes/results_re2d/PF00595_PF07679_checkpoint.pkl.tmp' -> '/home/xzccaogk/OverlappingGenes/results_re2d/PF00595_PF07679_checkpoint.pkl'
+Traceback (most recent call last):
+  File "/home/xzccaogk/miniforge3/lib/python3.13/multiprocessing/process.py", line 313, in _bootstrap
+    self.run()
+    ~~~~~~~~^^
+  File "/home/xzccaogk/miniforge3/lib/python3.13/multiprocessing/process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/xzccaogk/miniforge3/lib/python3.13/multiprocessing/pool.py", line 120, in worker
+    util.debug('worker got sentinel -- exiting')
+    ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/xzccaogk/miniforge3/lib/python3.13/multiprocessing/util.py", line 49, in debug
+    def debug(msg, *args):
+    
+  File "/home/xzccaogk/OverlappingGenes/re_2d_cluster.py", line 438, in sigterm_handler
+    save_checkpoint(ckpt_path, data)
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/xzccaogk/OverlappingGenes/re_2d_cluster.py", line 181, in save_checkpoint
+    os.replace(tmp_path, ckpt_path)
+    ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: '/home/xzccaogk/OverlappingGenes/results_re2d/PF00595_PF07679_checkpoint.pkl.tmp' -> '/home/xzccaogk/OverlappingGenes/results_re2d/PF00595_PF07679_checkpoint.pkl'
+  File "/home/xzccaogk/miniforge3/lib/python3.13/multiprocessing/process.py", line 313, in _bootstrap
+    self.run()
+    ~~~~~~~~^^
+  File "/home/xzccaogk/miniforge3/lib/python3.13/multiprocessing/process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/xzccaogk/miniforge3/lib/python3.13/multiprocessing/pool.py", line 140, in worker
+    util.debug('worker exiting after %d tasks' % completed)
+               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~
+  File "/home/xzccaogk/OverlappingGenes/re_2d_cluster.py", line 438, in sigterm_handler
+    save_checkpoint(ckpt_path, data)
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/xzccaogk/OverlappingGenes/re_2d_cluster.py", line 181, in save_checkpoint
+    os.replace(tmp_path, ckpt_path)
+    ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: '/home/xzccaogk/OverlappingGenes/results_re2d/PF00595_PF07679_checkpoint.pkl.tmp' -> '/home/xzccaogk/OverlappingGenes/results_re2d/PF00595_PF07679_checkpoint.pkl'
+  File "/home/xzccaogk/miniforge3/lib/python3.13/multiprocessing/process.py", line 313, in _bootstrap
+    self.run()
+    ~~~~~~~~^^
+  File "/home/xzccaogk/miniforge3/lib/python3.13/multiprocessing/process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/xzccaogk/miniforge3/lib/python3.13/multiprocessing/pool.py", line 120, in worker
+    util.debug('worker got sentinel -- exiting')
+    ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/xzccaogk/miniforge3/lib/python3.13/multiprocessing/util.py", line 49, in debug
+    def debug(msg, *args):
+    
+  File "/home/xzccaogk/OverlappingGenes/re_2d_cluster.py", line 438, in sigterm_handler
+    save_checkpoint(ckpt_path, data)
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/xzccaogk/OverlappingGenes/re_2d_cluster.py", line 181, in save_checkpoint
+    os.replace(tmp_path, ckpt_path)
+    ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: '/home/xzccaogk/OverlappingGenes/results_re2d/PF00595_PF07679_checkpoint.pkl.tmp' -> '/home/xzccaogk/OverlappingGenes/results_re2d/PF00595_PF07679_checkpoint.pkl'
+/var/spool/slurmd/job41157/slurm_script: line 38: 47739 Bus error               python "${SCRIPT_DIR}/re_2d_cluster.py" --pair-index "${SLURM_ARRAY_TASK_ID}" --workers "${SLURM_CPUS_PER_TASK}" --output-dir "${OUTPUT_DIR}" --data-dir "${DATA_DIR}" --resume

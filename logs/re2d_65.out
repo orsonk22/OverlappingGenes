@@ -1,0 +1,27 @@
+Starting pair 65 on compute-0-3.local at Wed  4 Mar 00:49:02 GMT 2026
+CPUs: 10, Temp: /tmp/re2d_65
+Workers: 10
+Found 12 protein families: ['PF00004', 'PF00041', 'PF00072', 'PF00076', 'PF00096', 'PF00153', 'PF00271', 'PF00397', 'PF00512', 'PF00595', 'PF02518', 'PF07679']
+Total pairs: 66
+
+Pair 65: PF02518 x PF07679
+Temp dir: /tmp/re2d_65
+
+Loading DCA parameters and natural energies...
+Data loaded in 1.9s
+  PF02518: 101 AA (303 nt)
+  PF07679: 76 AA (228 nt)
+  PF02518 natural energy: mean=186.84, std=26.05
+  PF07679 natural energy: mean=63.66, std=19.08
+
+Overlap lengths: [222, 221, 220] (frames [0, 2, 1])
+
+JIT warmup...
+JIT warmup done in 5.5s
+No checkpoint found, starting fresh
+
+============================================================
+Overlap 222 nt (frame 0) [1/3]
+============================================================
+  Repeat 1/10 done in 900.4s (z_min=0.968, wass_min=6.88)
+Finished pair 65 at Wed  4 Mar 01:15:14 GMT 2026

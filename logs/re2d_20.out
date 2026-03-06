@@ -1,0 +1,35 @@
+Starting pair 20 on compute-0-2.local at Tue  3 Mar 23:41:05 GMT 2026
+CPUs: 10, Temp: /tmp/re2d_20
+Workers: 10
+Found 12 protein families: ['PF00004', 'PF00041', 'PF00072', 'PF00076', 'PF00096', 'PF00153', 'PF00271', 'PF00397', 'PF00512', 'PF00595', 'PF02518', 'PF07679']
+Total pairs: 66
+
+Pair 20: PF00041 x PF07679
+Temp dir: /tmp/re2d_20
+
+Loading DCA parameters and natural energies...
+Data loaded in 5.1s
+  PF00041: 74 AA (222 nt)
+  PF07679: 76 AA (228 nt)
+  PF00041 natural energy: mean=120.66, std=17.64
+  PF07679 natural energy: mean=63.66, std=19.08
+
+Overlap lengths: [216, 215, 214] (frames [0, 2, 1])
+
+JIT warmup...
+JIT warmup done in 6.8s
+No checkpoint found, starting fresh
+
+============================================================
+Overlap 216 nt (frame 0) [1/3]
+============================================================
+  Repeat 1/10 done in 1140.3s (z_min=0.729, wass_min=7.21)
+  Repeat 2/10 done in 1005.0s (z_min=0.750, wass_min=7.21)
+  Repeat 3/10 done in 1010.8s (z_min=0.742, wass_min=6.81)
+  Repeat 4/10 done in 1001.8s (z_min=0.733, wass_min=7.33)
+  Repeat 5/10 done in 945.7s (z_min=0.764, wass_min=6.95)
+
+SIGTERM received — saving checkpoint to /home/xzccaogk/OverlappingGenes/results_re2d/PF00041_PF07679_checkpoint.pkl
+Checkpoint saved. Exiting.
+  Repeat 6/10 done in 861.6s (z_min=0.748, wass_min=7.65)
+Finished pair 20 at Wed  4 Mar 01:33:35 GMT 2026

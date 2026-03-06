@@ -1,0 +1,63 @@
+Exception ignored in atexit callback <function _exit_function at 0x7faa1d239260>:
+Traceback (most recent call last):
+  File "/home/xzccaogk/miniforge3/lib/python3.13/multiprocessing/util.py", line 407, in _exit_function
+Exception ignored in atexit callback <function _exit_function at 0x7faa1d239260>:
+Traceback (most recent call last):
+  File "/home/xzccaogk/miniforge3/lib/python3.13/multiprocessing/util.py", line 421, in _exit_function
+Exception ignored in atexit callback <function _exit_function at 0x7faa1d239260>:
+Traceback (most recent call last):
+Exception ignored in atexit callback <function _exit_function at 0x7faa1d239260>:
+  File "/home/xzccaogk/miniforge3/lib/python3.13/multiprocessing/util.py", line 391, in _exit_function
+Traceback (most recent call last):
+  File "/home/xzccaogk/miniforge3/lib/python3.13/multiprocessing/util.py", line 405, in _exit_function
+Exception ignored in atexit callback <function _exit_function at 0x7faa1d239260>:
+Traceback (most recent call last):
+  File "/home/xzccaogk/miniforge3/lib/python3.13/multiprocessing/util.py", line 421, in _exit_function
+    for p in active_children():
+  File "/home/xzccaogk/miniforge3/lib/python3.13/multiprocessing/process.py", line 43, in active_children
+    def _exit_function(info=info, debug=debug, _run_finalizers=_run_finalizers,
+    _run_finalizers(0)
+  File "/home/xzccaogk/OverlappingGenes/re_2d_cluster.py", line 438, in sigterm_handler
+  File "/home/xzccaogk/miniforge3/lib/python3.13/multiprocessing/util.py", line 362, in _run_finalizers
+    if current_process() is not None:
+  File "/home/xzccaogk/miniforge3/lib/python3.13/multiprocessing/process.py", line 37, in current_process
+Exception ignored in atexit callback <function _exit_function at 0x7faa1d239260>:
+Traceback (most recent call last):
+  File "/home/xzccaogk/miniforge3/lib/python3.13/multiprocessing/util.py", line 421, in _exit_function
+    keys = [key for key in list(_finalizer_registry) if f(key)]
+  File "/home/xzccaogk/OverlappingGenes/re_2d_cluster.py", line 438, in sigterm_handler
+    for p in active_children():
+  File "/home/xzccaogk/miniforge3/lib/python3.13/multiprocessing/process.py", line 43, in active_children
+    save_checkpoint(ckpt_path, data)
+  File "/home/xzccaogk/OverlappingGenes/re_2d_cluster.py", line 181, in save_checkpoint
+    os.replace(tmp_path, ckpt_path)
+FileNotFoundError: [Errno 2] No such file or directory: '/home/xzccaogk/OverlappingGenes/results_re2d/PF00153_PF00397_checkpoint.pkl.tmp' -> '/home/xzccaogk/OverlappingGenes/results_re2d/PF00153_PF00397_checkpoint.pkl'
+    save_checkpoint(ckpt_path, data)
+  File "/home/xzccaogk/OverlappingGenes/re_2d_cluster.py", line 181, in save_checkpoint
+    for p in active_children():
+  File "/home/xzccaogk/miniforge3/lib/python3.13/multiprocessing/process.py", line 43, in active_children
+    os.replace(tmp_path, ckpt_path)
+FileNotFoundError: [Errno 2] No such file or directory: '/home/xzccaogk/OverlappingGenes/results_re2d/PF00153_PF00397_checkpoint.pkl.tmp' -> '/home/xzccaogk/OverlappingGenes/results_re2d/PF00153_PF00397_checkpoint.pkl'
+    def active_children():
+  File "/home/xzccaogk/OverlappingGenes/re_2d_cluster.py", line 438, in sigterm_handler
+    def current_process():
+  File "/home/xzccaogk/OverlappingGenes/re_2d_cluster.py", line 440, in sigterm_handler
+    def active_children():
+    def active_children():
+  File "/home/xzccaogk/OverlappingGenes/re_2d_cluster.py", line 438, in sigterm_handler
+  File "/home/xzccaogk/OverlappingGenes/re_2d_cluster.py", line 438, in sigterm_handler
+    save_checkpoint(ckpt_path, data)
+  File "/home/xzccaogk/OverlappingGenes/re_2d_cluster.py", line 181, in save_checkpoint
+    os.replace(tmp_path, ckpt_path)
+FileNotFoundError: [Errno 2] No such file or directory: '/home/xzccaogk/OverlappingGenes/results_re2d/PF00153_PF00397_checkpoint.pkl.tmp' -> '/home/xzccaogk/OverlappingGenes/results_re2d/PF00153_PF00397_checkpoint.pkl'
+    sys.exit(0)
+SystemExit: 0
+    save_checkpoint(ckpt_path, data)
+  File "/home/xzccaogk/OverlappingGenes/re_2d_cluster.py", line 181, in save_checkpoint
+    save_checkpoint(ckpt_path, data)
+  File "/home/xzccaogk/OverlappingGenes/re_2d_cluster.py", line 181, in save_checkpoint
+    os.replace(tmp_path, ckpt_path)
+FileNotFoundError: [Errno 2] No such file or directory: '/home/xzccaogk/OverlappingGenes/results_re2d/PF00153_PF00397_checkpoint.pkl.tmp' -> '/home/xzccaogk/OverlappingGenes/results_re2d/PF00153_PF00397_checkpoint.pkl'
+    os.replace(tmp_path, ckpt_path)
+FileNotFoundError: [Errno 2] No such file or directory: '/home/xzccaogk/OverlappingGenes/results_re2d/PF00153_PF00397_checkpoint.pkl.tmp' -> '/home/xzccaogk/OverlappingGenes/results_re2d/PF00153_PF00397_checkpoint.pkl'
+/var/spool/slurmd/job41139/slurm_script: line 38: 46425 Bus error               python "${SCRIPT_DIR}/re_2d_cluster.py" --pair-index "${SLURM_ARRAY_TASK_ID}" --workers "${SLURM_CPUS_PER_TASK}" --output-dir "${OUTPUT_DIR}" --data-dir "${DATA_DIR}" --resume

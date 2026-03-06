@@ -1,0 +1,107 @@
+Exception ignored in atexit callback <function _exit_function at 0x7fab70ddd260>:
+Traceback (most recent call last):
+  File "/home/xzccaogk/miniforge3/lib/python3.13/multiprocessing/util.py", line 431, in _exit_function
+    _run_finalizers()
+  File "/home/xzccaogk/miniforge3/lib/python3.13/multiprocessing/util.py", line 363, in _run_finalizers
+    keys.sort(reverse=True)
+  File "/home/xzccaogk/OverlappingGenes/re_2d_cluster.py", line 440, in sigterm_handler
+    sys.exit(0)
+SystemExit: 0
+Exception ignored in atexit callback <function _exit_function at 0x7fab70ddd260>:
+Exception ignored in atexit callback <function _exit_function at 0x7fab70ddd260>:
+Traceback (most recent call last):
+Traceback (most recent call last):
+  File "/home/xzccaogk/miniforge3/lib/python3.13/multiprocessing/util.py", line 431, in _exit_function
+  File "/home/xzccaogk/miniforge3/lib/python3.13/multiprocessing/util.py", line 421, in _exit_function
+    _run_finalizers()
+  File "/home/xzccaogk/miniforge3/lib/python3.13/multiprocessing/util.py", line 362, in _run_finalizers
+    for p in active_children():
+  File "/home/xzccaogk/miniforge3/lib/python3.13/multiprocessing/process.py", line 47, in active_children
+    keys = [key for key in list(_finalizer_registry) if f(key)]
+  File "/home/xzccaogk/OverlappingGenes/re_2d_cluster.py", line 440, in sigterm_handler
+    sys.exit(0)
+SystemExit: 0
+    _cleanup()
+  File "/home/xzccaogk/miniforge3/lib/python3.13/multiprocessing/process.py", line 61, in _cleanup
+    def _cleanup():
+  File "/home/xzccaogk/OverlappingGenes/re_2d_cluster.py", line 438, in sigterm_handler
+    save_checkpoint(ckpt_path, data)
+  File "/home/xzccaogk/OverlappingGenes/re_2d_cluster.py", line 181, in save_checkpoint
+    os.replace(tmp_path, ckpt_path)
+FileNotFoundError: [Errno 2] No such file or directory: '/home/xzccaogk/OverlappingGenes/results_re2d/PF00041_PF00096_checkpoint.pkl.tmp' -> '/home/xzccaogk/OverlappingGenes/results_re2d/PF00041_PF00096_checkpoint.pkl'
+Exception ignored in atexit callback <function _exit_function at 0x7fab70ddd260>:
+Traceback (most recent call last):
+  File "/home/xzccaogk/miniforge3/lib/python3.13/multiprocessing/util.py", line 407, in _exit_function
+    if current_process() is not None:
+  File "/home/xzccaogk/miniforge3/lib/python3.13/multiprocessing/process.py", line 37, in current_process
+    def current_process():
+  File "/home/xzccaogk/OverlappingGenes/re_2d_cluster.py", line 440, in sigterm_handler
+    sys.exit(0)
+SystemExit: 0
+Exception ignored in atexit callback <function _exit_function at 0x7fab70ddd260>:
+Traceback (most recent call last):
+  File "/home/xzccaogk/miniforge3/lib/python3.13/multiprocessing/util.py", line 405, in _exit_function
+    _run_finalizers(0)
+  File "/home/xzccaogk/miniforge3/lib/python3.13/multiprocessing/util.py", line 362, in _run_finalizers
+    keys = [key for key in list(_finalizer_registry) if f(key)]
+  File "/home/xzccaogk/OverlappingGenes/re_2d_cluster.py", line 440, in sigterm_handler
+    sys.exit(0)
+SystemExit: 0
+Exception ignored in atexit callback <function _exit_function at 0x7fab70ddd260>:
+Traceback (most recent call last):
+  File "/home/xzccaogk/miniforge3/lib/python3.13/multiprocessing/util.py", line 405, in _exit_function
+    _run_finalizers(0)
+  File "/home/xzccaogk/miniforge3/lib/python3.13/multiprocessing/util.py", line 339, in _run_finalizers
+    def _run_finalizers(minpriority=None):
+  File "/home/xzccaogk/OverlappingGenes/re_2d_cluster.py", line 440, in sigterm_handler
+    sys.exit(0)
+SystemExit: 0
+Exception ignored in atexit callback <function _exit_function at 0x7fab70ddd260>:
+Traceback (most recent call last):
+  File "/home/xzccaogk/miniforge3/lib/python3.13/multiprocessing/util.py", line 431, in _exit_function
+    _run_finalizers()
+  File "/home/xzccaogk/miniforge3/lib/python3.13/multiprocessing/util.py", line 377, in _run_finalizers
+    _finalizer_registry.clear()
+  File "/home/xzccaogk/OverlappingGenes/re_2d_cluster.py", line 438, in sigterm_handler
+    save_checkpoint(ckpt_path, data)
+  File "/home/xzccaogk/OverlappingGenes/re_2d_cluster.py", line 181, in save_checkpoint
+    os.replace(tmp_path, ckpt_path)
+FileNotFoundError: [Errno 2] No such file or directory: '/home/xzccaogk/OverlappingGenes/results_re2d/PF00041_PF00096_checkpoint.pkl.tmp' -> '/home/xzccaogk/OverlappingGenes/results_re2d/PF00041_PF00096_checkpoint.pkl'
+Exception ignored in atexit callback <function _exit_function at 0x7fab70ddd260>:
+Traceback (most recent call last):
+Exception ignored in atexit callback <function _exit_function at 0x7fab70ddd260>:
+  File "/home/xzccaogk/miniforge3/lib/python3.13/multiprocessing/util.py", line 405, in _exit_function
+Traceback (most recent call last):
+  File "/home/xzccaogk/miniforge3/lib/python3.13/multiprocessing/util.py", line 431, in _exit_function
+    _run_finalizers(0)
+  File "/home/xzccaogk/miniforge3/lib/python3.13/multiprocessing/util.py", line 362, in _run_finalizers
+    _run_finalizers()
+  File "/home/xzccaogk/miniforge3/lib/python3.13/multiprocessing/util.py", line 363, in _run_finalizers
+    keys = [key for key in list(_finalizer_registry) if f(key)]
+  File "/home/xzccaogk/OverlappingGenes/re_2d_cluster.py", line 440, in sigterm_handler
+    keys.sort(reverse=True)
+  File "/home/xzccaogk/OverlappingGenes/re_2d_cluster.py", line 438, in sigterm_handler
+    sys.exit(0)
+SystemExit: 0
+    save_checkpoint(ckpt_path, data)
+  File "/home/xzccaogk/OverlappingGenes/re_2d_cluster.py", line 181, in save_checkpoint
+    os.replace(tmp_path, ckpt_path)
+FileNotFoundError: [Errno 2] No such file or directory: '/home/xzccaogk/OverlappingGenes/results_re2d/PF00041_PF00096_checkpoint.pkl.tmp' -> '/home/xzccaogk/OverlappingGenes/results_re2d/PF00041_PF00096_checkpoint.pkl'
+Exception ignored in atexit callback <function _exit_function at 0x7fab70ddd260>:
+Traceback (most recent call last):
+  File "/home/xzccaogk/miniforge3/lib/python3.13/multiprocessing/util.py", line 405, in _exit_function
+    _run_finalizers(0)
+  File "/home/xzccaogk/miniforge3/lib/python3.13/multiprocessing/util.py", line 339, in _run_finalizers
+    def _run_finalizers(minpriority=None):
+  File "/home/xzccaogk/OverlappingGenes/re_2d_cluster.py", line 440, in sigterm_handler
+    sys.exit(0)
+SystemExit: 0
+Exception ignored in atexit callback <function _exit_function at 0x7fab70ddd260>:
+Traceback (most recent call last):
+  File "/home/xzccaogk/miniforge3/lib/python3.13/multiprocessing/util.py", line 405, in _exit_function
+    _run_finalizers(0)
+  File "/home/xzccaogk/miniforge3/lib/python3.13/multiprocessing/util.py", line 339, in _run_finalizers
+    def _run_finalizers(minpriority=None):
+  File "/home/xzccaogk/OverlappingGenes/re_2d_cluster.py", line 440, in sigterm_handler
+    sys.exit(0)
+SystemExit: 0

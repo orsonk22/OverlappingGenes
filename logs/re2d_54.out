@@ -1,0 +1,92 @@
+Starting pair 54 on compute-0-2.local at Wed  4 Mar 00:38:04 GMT 2026
+CPUs: 10, Temp: /tmp/re2d_54
+Workers: 10
+Found 12 protein families: ['PF00004', 'PF00041', 'PF00072', 'PF00076', 'PF00096', 'PF00153', 'PF00271', 'PF00397', 'PF00512', 'PF00595', 'PF02518', 'PF07679']
+Total pairs: 66
+
+Pair 54: PF00271 x PF02518
+Temp dir: /tmp/re2d_54
+
+Loading DCA parameters and natural energies...
+Data loaded in 2.5s
+  PF00271: 95 AA (285 nt)
+  PF02518: 101 AA (303 nt)
+  PF00271 natural energy: mean=149.58, std=27.18
+  PF02518 natural energy: mean=186.84, std=26.05
+
+Overlap lengths: [279, 278, 277] (frames [0, 2, 1])
+
+JIT warmup...
+JIT warmup done in 4.6s
+No checkpoint found, starting fresh
+
+============================================================
+Overlap 279 nt (frame 0) [1/3]
+============================================================
+  Repeat 1/10 done in 1236.1s (z_min=0.520, wass_min=14.90)
+  Repeat 2/10 done in 1065.4s (z_min=0.621, wass_min=17.43)
+  Repeat 3/10 done in 963.6s (z_min=0.701, wass_min=17.76)
+  Repeat 4/10 done in 974.3s (z_min=0.504, wass_min=15.08)
+
+SIGTERM received — saving checkpoint to /home/xzccaogk/OverlappingGenes/results_re2d/PF00271_PF02518_checkpoint.pkl
+Checkpoint saved. Exiting.
+  Repeat 5/10 done in 919.9s (z_min=0.454, wass_min=14.01)
+  Repeat 6/10 done in 920.2s (z_min=0.528, wass_min=14.89)
+  Repeat 7/10 done in 898.9s (z_min=0.609, wass_min=15.00)
+  Repeat 8/10 done in 895.8s (z_min=0.455, wass_min=16.05)
+  Repeat 9/10 done in 914.0s (z_min=0.578, wass_min=13.79)
+  Repeat 10/10 done in 913.4s (z_min=0.605, wass_min=16.66)
+  Overlap 279 completed in 9701.8s
+  Best z-score: 0.898 at T1=0.2333, T2=0.2667
+  Best Wasserstein: 17.77 at T1=0.3333, T2=0.3667
+
+============================================================
+Overlap 278 nt (frame 2) [2/3]
+============================================================
+
+SIGTERM received — saving checkpoint to /home/xzccaogk/OverlappingGenes/results_re2d/PF00271_PF02518_checkpoint.pkl
+  Repeat 1/10 done in 868.0s (z_min=0.679, wass_min=11.51)
+  Repeat 2/10 done in 879.3s (z_min=0.646, wass_min=12.18)
+
+SIGTERM received — saving checkpoint to /home/xzccaogk/OverlappingGenes/results_re2d/PF00271_PF02518_checkpoint.pkl
+  Repeat 3/10 done in 874.0s (z_min=0.710, wass_min=11.71)
+  Repeat 4/10 done in 869.6s (z_min=0.721, wass_min=11.60)
+  Repeat 5/10 done in 863.4s (z_min=0.696, wass_min=11.78)
+  Repeat 6/10 done in 876.2s (z_min=0.704, wass_min=11.97)
+  Repeat 7/10 done in 874.9s (z_min=0.666, wass_min=11.41)
+  Repeat 8/10 done in 938.4s (z_min=0.686, wass_min=11.59)
+  Repeat 9/10 done in 891.5s (z_min=0.679, wass_min=12.21)
+  Repeat 10/10 done in 860.4s (z_min=0.703, wass_min=11.69)
+  Overlap 278 completed in 8797.2s
+  Best z-score: 0.702 at T1=0.6667, T2=0.8333
+  Best Wasserstein: 12.08 at T1=0.6667, T2=0.8667
+
+============================================================
+Overlap 277 nt (frame 1) [3/3]
+============================================================
+  Repeat 1/10 done in 859.2s (z_min=1.942, wass_min=29.15)
+  Repeat 2/10 done in 831.4s (z_min=2.024, wass_min=29.75)
+  Repeat 3/10 done in 847.8s (z_min=1.919, wass_min=27.15)
+
+SIGTERM received — saving checkpoint to /home/xzccaogk/OverlappingGenes/results_re2d/PF00271_PF02518_checkpoint.pkl
+Checkpoint saved. Exiting.
+  Repeat 4/10 done in 845.8s (z_min=1.911, wass_min=29.15)
+  Repeat 5/10 done in 834.5s (z_min=1.802, wass_min=29.35)
+  Repeat 6/10 done in 842.3s (z_min=1.792, wass_min=28.75)
+  Repeat 7/10 done in 841.2s (z_min=1.911, wass_min=29.03)
+
+SIGTERM received — saving checkpoint to /home/xzccaogk/OverlappingGenes/results_re2d/PF00271_PF02518_checkpoint.pkl
+Checkpoint saved. Exiting.
+  Repeat 8/10 done in 817.9s (z_min=1.805, wass_min=27.08)
+  Repeat 9/10 done in 801.7s (z_min=1.804, wass_min=29.48)
+  Repeat 10/10 done in 822.5s (z_min=1.829, wass_min=30.26)
+  Overlap 277 completed in 8346.7s
+  Best z-score: 2.057 at T1=0.2667, T2=0.3000
+  Best Wasserstein: 30.93 at T1=0.2333, T2=0.2667
+
+Results saved to /home/xzccaogk/OverlappingGenes/results_re2d/PF00271_PF02518_re2d.npz
+  NPZ keys: ['pf1', 'pf2', 'overlap_lengths', 'nat_mean_1', 'nat_std_1', 'nat_mean_2', 'nat_std_2', 'config', 'T1_fine_279', 'T2_fine_279', 'z_mean_279', 'z_std_279', 'wass_mean_279', 'wass_std_279', 'acc_mean_279', 'acc_std_279', 'z_best_indices_279', 'wass_best_indices_279', 'z_best_E1_279', 'z_best_E2_279', 'wass_best_E1_279', 'wass_best_E2_279', 'swap_mean_swap_rates_279', 'swap_elapsed_times_279', 'T1_fine_278', 'T2_fine_278', 'z_mean_278', 'z_std_278', 'wass_mean_278', 'wass_std_278', 'acc_mean_278', 'acc_std_278', 'z_best_indices_278', 'wass_best_indices_278', 'z_best_E1_278', 'z_best_E2_278', 'wass_best_E1_278', 'wass_best_E2_278', 'swap_mean_swap_rates_278', 'swap_elapsed_times_278', 'T1_fine_277', 'T2_fine_277', 'z_mean_277', 'z_std_277', 'wass_mean_277', 'wass_std_277', 'acc_mean_277', 'acc_std_277', 'z_best_indices_277', 'wass_best_indices_277', 'z_best_E1_277', 'z_best_E2_277', 'wass_best_E1_277', 'wass_best_E2_277', 'swap_mean_swap_rates_277', 'swap_elapsed_times_277']
+Checkpoint removed: /home/xzccaogk/OverlappingGenes/results_re2d/PF00271_PF02518_checkpoint.pkl
+
+Total time: 26846.5s (7.46h)
+Finished pair 54 at Wed  4 Mar 08:05:38 GMT 2026

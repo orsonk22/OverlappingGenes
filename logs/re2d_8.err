@@ -1,0 +1,1 @@
+/var/spool/slurmd/job41098/slurm_script: line 38:  9235 Bus error               python "${SCRIPT_DIR}/re_2d_cluster.py" --pair-index "${SLURM_ARRAY_TASK_ID}" --workers "${SLURM_CPUS_PER_TASK}" --output-dir "${OUTPUT_DIR}" --data-dir "${DATA_DIR}" --resume

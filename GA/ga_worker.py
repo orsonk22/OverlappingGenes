@@ -754,3 +754,99 @@ def process_overlap_trial(args, DCA_params_1, DCA_params_2, stats, config):
         'mean_e2_generated': energies[:, 1].mean(),
         'ga_converged': ga_converged
     }
+
+
+# =============================================================================
+# GA-ONLY WORKER (for pre-selected sequence pairs)
+# =============================================================================
+
+def run_ga_on_pair(args):
+    """
+    Worker function that runs ONLY the GA on a pre-selected sequence pair.
+    Decouples sequence generation from GA optimization for the
+    pool-then-search strategy.
+
+    Args:
+        args: tuple containing:
+            (seq_start, seq_end, Jvec1, hvec1, Jvec2, hvec2,
+             prot1_len, prot2_len,
+             mean_e1, mean_e2, std_e1, std_e2, z_score,
+             ga_pop_size, ga_generations,
+             overlap, trial_idx, hamming_dist, reading_frame, seed)
+
+    Returns:
+        dict with: overlap, trial_idx, hamming_dist, reading_frame,
+              max_barrier, path_distances, path_energies, fitness_history,
+              n_mutations, start_z1/z2, end_z1/z2, success, error
+    """
+    (seq_start, seq_end, Jvec1, hvec1, Jvec2, hvec2,
+     prot1_len, prot2_len,
+     mean_e1, mean_e2, std_e1, std_e2, z_score,
+     ga_pop_size, ga_generations,
+     overlap, trial_idx, hamming_dist, reading_frame, seed) = args
+
+    np.random.seed(seed)
+
+    len_aa_1 = prot1_len + 1  # +1 for stop codon
+    len_aa_2 = prot2_len + 1
+
+    try:
+        ga = GeneticPathFinder(
+            seq_start, seq_end,
+            Jvec1, hvec1, Jvec2, hvec2, len_aa_1, len_aa_2,
+            nat_mean_1=mean_e1, nat_mean_2=mean_e2,
+            nat_std_1=std_e1, nat_std_2=std_e2, z_score=z_score,
+            pop_size=ga_pop_size, n_generations=ga_generations
+        )
+
+        best_order, max_barrier, path_energies, path_distances = ga.run(verbose=False)
+
+        # Compute start/end z-scores
+        seq_start_arr = seq_to_array(seq_start)
+        seq_end_arr = seq_to_array(seq_end)
+        E1_s, E2_s = calculate_energies_from_array(
+            seq_start_arr, Jvec1, hvec1, Jvec2, hvec2, len_aa_1, len_aa_2)
+        E1_e, E2_e = calculate_energies_from_array(
+            seq_end_arr, Jvec1, hvec1, Jvec2, hvec2, len_aa_1, len_aa_2)
+
+        start_z1 = (E1_s - mean_e1) / std_e1 if std_e1 > 0 else np.nan
+        start_z2 = (E2_s - mean_e2) / std_e2 if std_e2 > 0 else np.nan
+        end_z1 = (E1_e - mean_e1) / std_e1 if std_e1 > 0 else np.nan
+        end_z2 = (E2_e - mean_e2) / std_e2 if std_e2 > 0 else np.nan
+
+        return {
+            'overlap': overlap,
+            'trial_idx': trial_idx,
+            'hamming_dist': hamming_dist,
+            'reading_frame': reading_frame,
+            'max_barrier': max_barrier,
+            'path_distances': path_distances.tolist(),
+            'path_energies': path_energies.tolist(),
+            'fitness_history': list(ga.fitness_history),
+            'n_mutations': len(ga.mutations),
+            'start_z1': start_z1,
+            'start_z2': start_z2,
+            'end_z1': end_z1,
+            'end_z2': end_z2,
+            'success': True,
+            'error': None
+        }
+
+    except Exception as e:
+        return {
+            'overlap': overlap,
+            'trial_idx': trial_idx,
+            'hamming_dist': hamming_dist,
+            'reading_frame': reading_frame,
+            'max_barrier': np.nan,
+            'path_distances': [],
+            'path_energies': [],
+            'fitness_history': [],
+            'n_mutations': 0,
+            'start_z1': np.nan,
+            'start_z2': np.nan,
+            'end_z1': np.nan,
+            'end_z2': np.nan,
+            'success': False,
+            'error': str(e)
+        }

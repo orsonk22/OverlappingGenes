@@ -1,0 +1,33 @@
+Starting pair 14 on compute-0-2.local at Tue  3 Mar 23:41:03 GMT 2026
+CPUs: 10, Temp: /tmp/re2d_14
+Workers: 10
+Found 12 protein families: ['PF00004', 'PF00041', 'PF00072', 'PF00076', 'PF00096', 'PF00153', 'PF00271', 'PF00397', 'PF00512', 'PF00595', 'PF02518', 'PF07679']
+Total pairs: 66
+
+Pair 14: PF00041 x PF00153
+Temp dir: /tmp/re2d_14
+
+Loading DCA parameters and natural energies...
+Data loaded in 5.1s
+  PF00041: 74 AA (222 nt)
+  PF00153: 85 AA (255 nt)
+  PF00041 natural energy: mean=120.66, std=17.64
+  PF00153 natural energy: mean=92.55, std=25.62
+
+Overlap lengths: [216, 215, 214] (frames [0, 2, 1])
+
+JIT warmup...
+JIT warmup done in 6.8s
+No checkpoint found, starting fresh
+
+============================================================
+Overlap 216 nt (frame 0) [1/3]
+============================================================
+  Repeat 1/10 done in 1124.3s (z_min=0.268, wass_min=10.79)
+  Repeat 2/10 done in 1089.0s (z_min=0.323, wass_min=10.97)
+  Repeat 3/10 done in 1061.1s (z_min=0.318, wass_min=10.67)
+  Repeat 4/10 done in 1068.7s (z_min=0.257, wass_min=11.36)
+  Repeat 5/10 done in 1032.8s (z_min=0.268, wass_min=12.32)
+  Repeat 6/10 done in 822.9s (z_min=0.234, wass_min=12.53)
+  Repeat 7/10 done in 824.2s (z_min=0.195, wass_min=10.80)
+Finished pair 14 at Wed  4 Mar 01:51:58 GMT 2026

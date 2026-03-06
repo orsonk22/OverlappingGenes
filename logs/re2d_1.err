@@ -1,0 +1,12 @@
+Exception ignored in atexit callback <function _exit_function at 0x7f98845f1260>:
+Traceback (most recent call last):
+  File "/home/xzccaogk/miniforge3/lib/python3.13/multiprocessing/util.py", line 421, in _exit_function
+    for p in active_children():
+  File "/home/xzccaogk/miniforge3/lib/python3.13/multiprocessing/process.py", line 47, in active_children
+    _cleanup()
+  File "/home/xzccaogk/miniforge3/lib/python3.13/multiprocessing/process.py", line 61, in _cleanup
+    def _cleanup():
+  File "/home/xzccaogk/OverlappingGenes/re_2d_cluster.py", line 440, in sigterm_handler
+    sys.exit(0)
+SystemExit: 0
+/var/spool/slurmd/job41091/slurm_script: line 38: 450007 Bus error               python "${SCRIPT_DIR}/re_2d_cluster.py" --pair-index "${SLURM_ARRAY_TASK_ID}" --workers "${SLURM_CPUS_PER_TASK}" --output-dir "${OUTPUT_DIR}" --data-dir "${DATA_DIR}" --resume

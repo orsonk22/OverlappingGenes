@@ -1,0 +1,10 @@
+Exception ignored in atexit callback <function _exit_function at 0x7fa201d39260>:
+Traceback (most recent call last):
+  File "/home/xzccaogk/miniforge3/lib/python3.13/multiprocessing/util.py", line 407, in _exit_function
+    if current_process() is not None:
+  File "/home/xzccaogk/miniforge3/lib/python3.13/multiprocessing/process.py", line 37, in current_process
+    def current_process():
+  File "/home/xzccaogk/OverlappingGenes/re_2d_cluster.py", line 440, in sigterm_handler
+    sys.exit(0)
+SystemExit: 0
+/var/spool/slurmd/job41093/slurm_script: line 38:  9206 Bus error               python "${SCRIPT_DIR}/re_2d_cluster.py" --pair-index "${SLURM_ARRAY_TASK_ID}" --workers "${SLURM_CPUS_PER_TASK}" --output-dir "${OUTPUT_DIR}" --data-dir "${DATA_DIR}" --resume

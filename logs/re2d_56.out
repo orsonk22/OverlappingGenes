@@ -1,0 +1,29 @@
+Starting pair 56 on compute-0-3.local at Wed  4 Mar 00:41:23 GMT 2026
+CPUs: 10, Temp: /tmp/re2d_56
+Workers: 10
+Found 12 protein families: ['PF00004', 'PF00041', 'PF00072', 'PF00076', 'PF00096', 'PF00153', 'PF00271', 'PF00397', 'PF00512', 'PF00595', 'PF02518', 'PF07679']
+Total pairs: 66
+
+Pair 56: PF00397 x PF00512
+Temp dir: /tmp/re2d_56
+
+Loading DCA parameters and natural energies...
+Data loaded in 0.5s
+  PF00397: 28 AA (84 nt)
+  PF00512: 62 AA (186 nt)
+  PF00397 natural energy: mean=34.45, std=7.29
+  PF00512 natural energy: mean=105.72, std=17.69
+
+Overlap lengths: [78, 77, 76] (frames [0, 2, 1])
+
+JIT warmup...
+JIT warmup done in 4.4s
+No checkpoint found, starting fresh
+
+============================================================
+Overlap 78 nt (frame 0) [1/3]
+============================================================
+
+SIGTERM received — saving checkpoint to /home/xzccaogk/OverlappingGenes/results_re2d/PF00397_PF00512_checkpoint.pkl
+Checkpoint saved. Exiting.
+Finished pair 56 at Wed  4 Mar 00:49:01 GMT 2026

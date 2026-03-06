@@ -1,0 +1,28 @@
+Traceback (most recent call last):
+  File "/home/xzccaogk/miniforge3/lib/python3.13/site-packages/numpy/_core/memmap.py", line 274, in __new__
+    fid.flush()
+    ~~~~~~~~~^^
+OSError: [Errno 28] No space left on device
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/xzccaogk/OverlappingGenes/re_2d_cluster.py", line 673, in <module>
+    main()
+    ~~~~^^
+  File "/home/xzccaogk/OverlappingGenes/re_2d_cluster.py", line 602, in main
+    for event in process_overlap(
+                 ~~~~~~~~~~~~~~~^
+        overlap_len, params, nat_stats, nat_energies,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+        checkpoint_data=checkpoint_data,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ):
+    ^
+  File "/home/xzccaogk/OverlappingGenes/re_2d_cluster.py", line 261, in process_overlap
+    E1_mmap = np.memmap(mmap_E1_path, dtype=np.float64, mode='w+', shape=mmap_shape)
+  File "/home/xzccaogk/miniforge3/lib/python3.13/site-packages/numpy/_core/memmap.py", line 241, in __new__
+    with f_ctx as fid:
+         ^^^^^
+OSError: [Errno 28] No space left on device

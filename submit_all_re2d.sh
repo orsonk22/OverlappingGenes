@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --job-name=re2d
-#SBATCH --array=0-65
+#SBATCH --array=0-65%20
 #SBATCH --cpus-per-task=10
 #SBATCH --mem=32G
 #SBATCH --time=48:00:00
@@ -15,15 +15,15 @@ export OMP_NUM_THREADS=1
 export MKL_NUM_THREADS=1
 
 # ── Paths ────────────────────────────────────────────────────────────
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+SCRIPT_DIR="/home/xzccaogk/OverlappingGenes"
 OUTPUT_DIR="${SCRIPT_DIR}/results_re2d"
-DATA_DIR="${SCRIPT_DIR}/../bmDCA"
+DATA_DIR="${SCRIPT_DIR}/bmDCA"
 
 mkdir -p "${OUTPUT_DIR}"
 mkdir -p logs
 
 # Use node-local scratch for mmap temp files
-export SLURM_TMPDIR="${SLURM_TMPDIR:-/tmp/re2d_${SLURM_ARRAY_TASK_ID}}"
+export SLURM_TMPDIR="/home/xzccaogk/OverlappingGenes/tmp_mmap/${SLURM_ARRAY_TASK_ID}"
 mkdir -p "${SLURM_TMPDIR}"
 
 # ── Run ──────────────────────────────────────────────────────────────
@@ -40,4 +40,4 @@ python "${SCRIPT_DIR}/re_2d_cluster.py" \
 echo "Finished pair ${SLURM_ARRAY_TASK_ID} at $(date)"
 
 # Clean up temp
-rm -rf "${SLURM_TMPDIR}"
+rm -rf "/home/xzccaogk/OverlappingGenes/tmp_mmap/${SLURM_ARRAY_TASK_ID}"
