@@ -389,6 +389,119 @@ def get_path_energies(path_order, seq_start, mutations,
     return np.array(path_energies), np.array(path_distances)
 
 
+def get_path_intermediates(path_order, seq_start, mutations,
+                           Jvec1, hvec1, Jvec2, hvec2, len_aa_1, len_aa_2,
+                           nat_mean_1, nat_mean_2, nat_std_1=None, nat_std_2=None, z_score=False):
+    """
+    Replay a mutation path and capture intermediate AA sequences at each step.
+
+    Same logic as get_path_energies() but also translates each intermediate
+    nucleotide sequence to both amino acid sequences.
+
+    Returns:
+        path_energies: np.array of total energies (E1+E2) at each step
+        path_distances: np.array of z-score distances at each step
+        e1_list: np.array of E1 values at each step
+        e2_list: np.array of E2 values at each step
+        aa_seqs_1: list of AA strings for protein 1 at each step (stop codon stripped)
+        aa_seqs_2: list of AA strings for protein 2 at each step (stop codon stripped)
+    """
+    # Nucleotide lengths including stop codon (needed by split_sequence_and_to_aa)
+    len_1_n = (len_aa_1 + 1) * 3
+    len_2_n = (len_aa_2 + 1) * 3
+
+    current_seq = seq_start
+    seq_arr = og.seq_str_to_int_array(current_seq)
+
+    E1, E2 = calculate_energies_separate(seq_arr, Jvec1, hvec1, Jvec2, hvec2, len_aa_1, len_aa_2)
+
+    path_energies = [E1 + E2]
+    e1_list = [E1]
+    e2_list = [E2]
+
+    if z_score and nat_std_1 is not None and nat_std_2 is not None:
+        path_distances = [abs(E1 - nat_mean_1)/nat_std_1 + abs(E2 - nat_mean_2)/nat_std_2]
+    else:
+        path_distances = [abs(E1 - nat_mean_1) + abs(E2 - nat_mean_2)]
+
+    # Translate initial sequence to AA
+    aa1, aa2 = og.split_sequence_and_to_aa(list(current_seq), len_1_n, len_2_n)
+    aa_seqs_1 = [''.join(aa1[:-1])]  # strip terminal stop codon
+    aa_seqs_2 = [''.join(aa2[:-1])]
+
+    for idx in path_order:
+        pos, old_nt, new_nt = mutations[idx]
+        current_seq = current_seq[:pos] + new_nt + current_seq[pos+1:]
+        seq_arr = og.seq_str_to_int_array(current_seq)
+
+        E1, E2 = calculate_energies_separate(seq_arr, Jvec1, hvec1, Jvec2, hvec2, len_aa_1, len_aa_2)
+        path_energies.append(E1 + E2)
+        e1_list.append(E1)
+        e2_list.append(E2)
+
+        if z_score and nat_std_1 is not None and nat_std_2 is not None:
+            path_distances.append(abs(E1 - nat_mean_1)/nat_std_1 + abs(E2 - nat_mean_2)/nat_std_2)
+        else:
+            path_distances.append(abs(E1 - nat_mean_1) + abs(E2 - nat_mean_2))
+
+        # Translate to AA
+        aa1, aa2 = og.split_sequence_and_to_aa(list(current_seq), len_1_n, len_2_n)
+        aa_seqs_1.append(''.join(aa1[:-1]))
+        aa_seqs_2.append(''.join(aa2[:-1]))
+
+    return (np.array(path_energies), np.array(path_distances),
+            np.array(e1_list), np.array(e2_list),
+            aa_seqs_1, aa_seqs_2)
+
+
+def generate_random_valid_paths(seq_start, seq_end, len_aa_1, len_aa_2,
+                                n_paths=5, max_retries=1000):
+    """
+    Generate N random stop-codon-free mutation orderings between two sequences.
+
+    Args:
+        seq_start: starting nucleotide sequence (string)
+        seq_end: ending nucleotide sequence (string)
+        len_aa_1: length of protein 1 in AA (including stop)
+        len_aa_2: length of protein 2 in AA (including stop)
+        n_paths: number of valid random paths to generate
+        max_retries: max attempts per path
+
+    Returns:
+        list of np.array mutation orderings (may be shorter than n_paths if retries exhausted)
+    """
+    seq_arr_start = og.seq_str_to_int_array(seq_start)
+    seq_arr_end = og.seq_str_to_int_array(seq_end)
+
+    # Get mutations
+    n_mut = 0
+    mut_positions_list = []
+    mut_new_nts_list = []
+    for i in range(len(seq_arr_start)):
+        if seq_arr_start[i] != seq_arr_end[i]:
+            mut_positions_list.append(i)
+            mut_new_nts_list.append(seq_arr_end[i])
+            n_mut += 1
+
+    mut_positions = np.array(mut_positions_list, dtype=np.int32)
+    mut_new_nts = np.array(mut_new_nts_list, dtype=np.uint8)
+
+    valid_paths = []
+    for _ in range(n_paths):
+        found = False
+        for _ in range(max_retries):
+            order = np.random.permutation(n_mut).astype(np.int32)
+            if is_path_stop_codon_free(order, seq_arr_start, mut_positions, mut_new_nts,
+                                       len_aa_1, len_aa_2):
+                valid_paths.append(order)
+                found = True
+                break
+        if not found:
+            print(f"  Warning: could not find valid random path after {max_retries} retries")
+
+    return valid_paths
+
+
 # =============================================================================
 # GENETIC ALGORITHM PATH FINDER
 # =============================================================================

@@ -20,7 +20,8 @@
       "Bash(\"/c/Program Files/Python313/python\":*)",
       "WebSearch",
       "WebFetch(domain:uclphysast.github.io)",
-      "Bash(bash:*)"
+      "Bash(bash:*)",
+      "Bash(cd \"C:/Users/orson/OneDrive/Documents/OverlappingGenes/Large Scale\" && python -c \"\nimport json\nwith open\\('large_scale_OVERLAPS_multiprocessing.ipynb', encoding='utf-8'\\) as f:\n    nb = json.load\\(f\\)\nfor i, cell in enumerate\\(nb['cells']\\):\n    src = ''.join\\(cell['source']\\)\n    if 'LINE PLOT' in src and 'METRICS VS OVERLAP' in src:\n        print\\(f'Cell {i} \\(id={cell.get\\(\\\\\"id\\\\\",\\\\\"?\\\\\"\\)}\\)'\\)\n        break\n\")"
     ]
   }
 }

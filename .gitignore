@@ -182,3 +182,17 @@ cython_debug/
 
 # Large checkpoint/data files
 *.pkl
+
+# Plot images
+*.png
+*.gif
+
+# Duplicate bmDCA data (keep only root bmDCA/)
+Project/bmDCA/
+Project/PF*/
+Large Scale/bmDCA/
+Large Scale/PF*/
+GA/bmDCA/
+
+# Large alignment files
+Trimmed Alignments/
