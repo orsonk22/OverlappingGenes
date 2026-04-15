@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 import os
 
 # --- Okabe-Ito palette (colourblind-safe) ---
-BLACK       = '#000000'
+BLACK       = "#1D24BC"
 ORANGE      = '#E69F00'
 SKY_BLUE    = '#56B4E9'
 GREEN       = '#009E73'
