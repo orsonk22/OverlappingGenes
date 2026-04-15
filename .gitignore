@@ -196,3 +196,7 @@ GA/bmDCA/
 
 # Large alignment files
 Trimmed Alignments/
+
+# Large simulation results (too big for git)
+results_re2d/
+*.npz
